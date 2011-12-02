@@ -6,6 +6,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
+from utils import mangle_name, join_names
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -66,32 +67,16 @@ JOIN artist_credit_name acn ON r.artist_credit = acn.artist_credit
 WHERE acn.artist = %s
 """
 
-def mangle_name(s):
-    s = s.lower()
-    return re.sub(r'\W', '', s, flags=re.UNICODE)
-
-def join_albums(strings):
-    result = 'album'
-    if len(strings) > 1:
-        result += 's'
-    result += ' '
-    strings = ['"%s"' % s for s in strings]
-    if len(strings) < 2:
-        result += strings[0]
-    elif len(strings) < 5:
-        result += ', '.join(strings[:-1])
-        result += ' and %s' % strings[-1]
-    else:
-        result += ', '.join(strings[:4])
-        result += ' and %s more' % (len(strings) - 4)
-    return result
-
 for a_id, a_gid, a_name in db.execute(query):
     print 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (a_name, a_gid)
-    matches = wps.query(a_name, defType='dismax', qf='name', rows=30).results
+    matches = wps.query(a_name, defType='dismax', qf='name', rows=50).results
     last_wp_request = time.time()
     for match in matches:
         title = match['name']
+        if title.endswith('album)') or title.endswith('song)'):
+            continue
+        if mangle_name(re.sub(' \(.+\)$', '', title)) != mangle_name(a_name) and mangle_name(title) != mangle_name(a_name):
+            continue
         delay = time.time() - last_wp_request
         if delay < 1.0:
             time.sleep(1.0 - delay)
@@ -101,7 +86,8 @@ for a_id, a_gid, a_name in db.execute(query):
         if not pages or 'revisions' not in pages[0]:
             continue
         page = mangle_name(pages[0]['revisions'][0].values()[0])
-        if 'disambiguationpages' in page:
+        if 'disambiguationpages' in page or 'infoboxalbum' in page:
+            print ' * disambiguation or album page, skipping'
             continue
         print ' * trying article "%s"' % (title,)
         page_title = pages[0]['title']
@@ -113,14 +99,14 @@ for a_id, a_gid, a_name in db.execute(query):
             continue
         for album in albums:
             mangled_album = mangle_name(album)
-            if len(mangled_album) > 6 and mangled_album in page:
+            if len(mangled_album) > 10 and mangled_album in page:
                 found_albums.append(album)
         ratio = len(found_albums) * 1.0 / len(albums)
         print ' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums))
-        if ratio < 0.2:
+        if ratio < 0.15:
             continue
         url = 'http://en.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
-        text = 'Matched based on the name. The page mentions %s.' % (join_albums(found_albums),)
+        text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
         print ' * linking to %s' % (url,)
         print ' * edit note: %s' % (text,)
         mb.add_url("artist", a_gid, 179, url, text)
