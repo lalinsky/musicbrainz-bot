@@ -92,8 +92,6 @@ for a_id, a_gid, a_name in db.execute(query):
     last_wp_request = time.time()
     for match in matches:
         title = match['name']
-        if mangle_name(title) != mangle_name(a_name):
-            continue
         delay = time.time() - last_wp_request
         if delay < 1.0:
             time.sleep(1.0 - delay)
