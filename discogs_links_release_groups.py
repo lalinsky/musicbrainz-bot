@@ -80,15 +80,15 @@ while True:
 rg_without_master = list(rg_without_master)
 random.shuffle(rg_without_master)
 all_count = len(rg_without_master)
-i = 1
+i = 0
 for rg in rg_without_master:
+    i += 1
     urls = set([u[0] for u in db.execute(query_rg_release_discogs, (rg,))])
     if len(urls) < 2:
         continue
     gid, name = [(gid, name) for gid, name in db.execute(query_rg_details, (rg,))][0]
     print '%d/%d - %.2f%%' % (i, all_count, i * 100.0 / all_count)
     print '%s http://musicbrainz.org/release-group/%s' % (name, gid)
-    i += 1
     masters = set(discogs_get_master(urls))
     if len(masters) > 1:
         print '  problematic release group'
