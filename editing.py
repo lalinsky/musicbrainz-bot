@@ -36,7 +36,21 @@ class MusicBrainzClient(object):
         self.b["ar.edit_note"] = edit_note.encode('utf8')
         self.b.submit()
         page = self.b.response().read()
-        if "Thank you, your edit has been entered into the edit queue for peer review" not in page:
+        if "Thank you, your edit has been" not in page:
             if "already exists" not in page:
+                raise Exception('unable to post edit')
+
+    def set_artist_country(self, entity_id, country_id, edit_note):
+        self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        if self.b["edit-artist.country_id"] != ['']:
+            print " * already set, not changing"
+            return
+        self.b["edit-artist.country_id"] = [str(country_id)]
+        self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
+        self.b.submit()
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            if 'any changes to the data already present' not in page:
                 raise Exception('unable to post edit')
 
