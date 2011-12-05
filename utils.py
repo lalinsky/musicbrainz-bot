@@ -7,18 +7,71 @@ def mangle_name(s):
 
 
 def join_names(type, strings):
-    result = type
+    if not strings:
+        return ''
     if len(strings) > 1:
-        result += 's'
+        if type == 'category':
+            result = 'categories'
+        elif not type:
+            result = type
+        else:
+            result = type + 's'
+    else:
+        result = type
     result += ' '
     strings = ['"%s"' % s for s in strings]
     if len(strings) < 2:
         result += strings[0]
-    elif len(strings) < 5:
+    elif len(strings) < 4:
         result += ', '.join(strings[:-1])
         result += ' and %s' % strings[-1]
     else:
-        result += ', '.join(strings[:4])
-        result += ' and %s more' % (len(strings) - 4)
+        result += ', '.join(strings[:3])
+        result += ' and %s more' % (len(strings) - 3)
     return result
+
+
+script_ranges = {}
+script_regexes = {}
+for line in open('Scripts.txt'):
+    line = line.strip()
+    if line.startswith('#') or not line:
+        continue
+    parts = line.split(';', 2)
+    range_str = parts[0].strip()
+    script = parts[1].split()[0]
+    if '..' in range_str:
+        range = tuple(int(a, 16) for a in range_str.split('..'))
+    else:
+        range = (int(range_str, 16), int(range_str, 16))
+    script_ranges.setdefault(script, []).append(range)
+
+
+def is_in_script(text, scripts):
+    regex = ''
+    for script in scripts:
+        script_regex = script_regexes.get(script, '')
+        if not script_regex:
+            for range in script_ranges[script]:
+                if range[0] == range[1]:
+                    script_regex += '%s' % (re.escape(unichr(range[0])),)
+                else:
+                    script_regex += '%s-%s' % tuple(map(re.escape, map(unichr, range)))
+            script_regexes[script] = script_regex
+        regex += script_regex
+    regex = '^[%s]+$' % regex
+    print regex
+    return bool(re.match(regex, text))
+
+
+def contains_text_in_script(text, scripts):
+    regex = ''
+    for script in scripts:
+        for range in script_ranges[script]:
+            if range[0] == range[1]:
+                regex += '%s' % (re.escape(unichr(range[0])),)
+            else:
+                regex += '%s-%s' % tuple(map(re.escape, map(unichr, range)))
+    regex = '[%s]+' % regex
+    return bool(re.search(regex, text))
 

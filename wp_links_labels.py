@@ -59,7 +59,7 @@ WHERE rl.label = %s
 
 for id, gid, name in db.execute(query):
     print 'Looking up label "%s" http://musicbrainz.org/label/%s' % (name, gid)
-    matches = wps.query(name, defType='dismax', qf='name', rows=50).results
+    matches = wps.query(name.lower(), defType='dismax', qf='name', rows=50).results
     last_wp_request = time.time()
     for match in matches:
         page_title = match['name']
@@ -85,6 +85,8 @@ for id, gid, name in db.execute(query):
         artists = set([r[0] for r in db.execute(query_label_artists, (id,))])
         if name in artists:
             artists.remove(name)
+        if not artists:
+            continue
         found_artists = []
         for artist in artists:
             mangled_artist = mangle_name(artist)
@@ -92,7 +94,7 @@ for id, gid, name in db.execute(query):
                 found_artists.append(artist)
         ratio = len(found_artists) * 1.0 / len(artists)
         print ' * ratio: %s, has artists: %s, found artists: %s' % (ratio, len(artists), len(found_artists))
-        if found_artists < 2:
+        if len(found_artists) < 2:
             continue
         url = 'http://en.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
         text = 'Matched based on the name. The page mentions %s.' % (join_names('artist', found_artists),)
