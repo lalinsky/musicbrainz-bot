@@ -84,11 +84,14 @@ for i, (rg, gid, name) in enumerate(itertools.chain(*rg_grouped)):
     out(u'%d/%d - %.2f%%' % (i, count, i * 100.0 / count))
     out(u'%s http://musicbrainz.org/release-group/%s' % (name, gid))
     masters = list(discogs_get_master(urls))
-    if len(set(masters)) > 1 or len(masters) != len(urls):
-        out(u'  problematic release group')
-        continue
     if len(masters) == 0:
-        out(u'  no Discogs master!')
+        out(u'  aborting, no Discogs master!')
+        continue
+    if len(set(masters)) > 1:
+        out(u'  aborting, releases with different Discogs master in one group!')
+        continue
+    if len(masters) != len(urls):
+        out(u'  aborting, releases without Discogs master in group!')
         continue
     master_name, master_id, master_artists = masters[0]
     ratio = Levenshtein.ratio(master_name.lower(), name.lower())
