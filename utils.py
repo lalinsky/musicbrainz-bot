@@ -18,7 +18,8 @@ def join_names(type, strings):
             result = type + 's'
     else:
         result = type
-    result += ' '
+    if result:
+        result += ' '
     strings = ['"%s"' % s for s in strings]
     if len(strings) < 2:
         result += strings[0]
@@ -74,4 +75,22 @@ def contains_text_in_script(text, scripts):
                 regex += '%s-%s' % tuple(map(re.escape, map(unichr, range)))
     regex = '[%s]+' % regex
     return bool(re.search(regex, text))
+
+
+def mw_remove_markup(text):
+    result = []
+    in_template = 0
+    in_comment = 0
+    for token in re.split(r'(\{\{|\}\}|<!--|-->)', text):
+        if token == '{{':
+            in_template += 1
+        elif token == '}}':
+            in_template -= 1
+        elif token == '<!--':
+            in_comment += 1
+        elif token == '-->':
+            in_comment -= 1
+        elif not in_template and not in_comment:
+            result.append(token)
+    return ''.join(result)
 
