@@ -7,7 +7,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names
+from utils import mangle_name, join_names, mw_remove_markup
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -20,7 +20,7 @@ wps = solr.SolrConnection('http://localhost:8983/solr/wikipedia')
 mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
 
 query = """
-SELECT a.id, a.gid, a.name, a.country, u.url
+SELECT DISTINCT a.id, a.gid, a.name, a.country, u.url
 FROM s_artist a
 JOIN l_artist_url l ON l.entity0 = a.id AND l.link IN (SELECT id FROM link WHERE link_type = 179)
 JOIN url u ON u.id = l.entity1
@@ -30,19 +30,19 @@ WHERE
     a.country IS NULL AND
     u.url LIKE 'http://en.wikipedia.org/wiki/%%'
 ORDER BY a.id
-LIMIT 1000
+LIMIT 10000
 """
 
 
 def get_page_content_from_cache(title):
-    key = title.encode('ascii', 'xmlcharrefreplace')
+    key = title.encode('ascii', 'xmlcharrefreplace').replace('/', '_')
     file = os.path.join('enwiki-cache', key[0], key)
     if os.path.exists(file):
         return open(file).read().decode('utf8')
 
 
 def add_page_content_to_cache(title, content):
-    key = title.encode('ascii', 'xmlcharrefreplace')
+    key = title.encode('ascii', 'xmlcharrefreplace').replace('/', '_')
     dir = os.path.join('enwiki-cache', key[0])
     if not os.path.exists(dir):
         os.mkdir(dir)
@@ -74,8 +74,6 @@ def extract_page_title(url):
 
 category_re = re.compile(r'\[\[Category:(.+?)\]\]')
 infobox_re = re.compile(r'\{\{Infobox (musical artist|person)[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
-template_re = re.compile(r'\{\{(?:[^{}].*?|\{\{.*?\}\})*\}\}', re.DOTALL)
-comment_re = re.compile(r'<!--.*?-->', re.DOTALL)
 
 link_countries = {
     'Afghanistan': 'AF',
@@ -190,6 +188,7 @@ link_countries = {
     'Italy': 'IT',
     'Jamaica': 'JM',
     'Japan': 'JP',
+    'Tokyo': 'JP',
     'Jersey': 'JE',
     'Jordan': 'JO',
     'Kazakhstan': 'KZ',
@@ -430,9 +429,20 @@ category_countries = {
     'Mexican': 'MX',
     'Latvian': 'LV',
     'Estonian': 'EE',
-    'Finish': 'FI',
+    'Finnish': 'FI',
     'Austrian': 'AT',
     'Israeli': 'IL',
+    'South African': 'ZA',
+    'Puerto Rican': 'PR',
+    'Senegalese': 'SN',
+    'Croatian': 'HR',
+    'Danish': 'DK',
+    'Icelandic': 'IS',
+    'Jamaican': 'JM',
+    'New Zealand': 'NZ',
+    'Algerian': 'DZ',
+    'Cuban': 'CU',
+    'Hong Kong': 'HK',
 }
 
 
@@ -451,8 +461,7 @@ def parse_infobox(page):
 
 
 def extract_first_paragraph(page):
-    page = template_re.sub('', page)
-    page = comment_re.sub('', page)
+    page = mw_remove_markup(page)
     return page.strip().split('\n\n')[0]
 
 
@@ -473,9 +482,11 @@ def determine_country_from_categories(page):
 def find_countries_in_text(countries, relevant_links, text):
     text = text.replace('_', ' ')
     for name, code in link_countries.iteritems():
-        if '[[' + name + ']]' in text or '[[' + name + '|' in text:
-            countries.add(code)
-            relevant_links.append(name)
+        for name in [name, name.lower()]:
+            if '[[' + name + ']]' in text or '[[' + name + '|' in text:
+                countries.add(code)
+                relevant_links.append(name)
+                break
     for name in link_us_states:
         m = re.search(r'\[\[(([^\]\|]+, )?%s)(\]\]|\|)' % (re.escape(name),), text)
         if m is not None:
@@ -507,11 +518,15 @@ country_ids = {}
 for id, code in db.execute("SELECT id, iso_code FROM country"):
     country_ids[code] = id
 
+seen = set()
 for artist in db.execute(query):
+    if artist['id'] in seen:
+        continue
+    seen.add(artist['id'])
     print 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid'])
     print ' * wiki:', artist['url']
     page_title = extract_page_title(artist['url'])
-    page = get_page_content(wp, page_title)
+    page = get_page_content(wp, page_title) or ''
     infobox = parse_infobox(page)
     all_countries = set()
     all_reasons = []
@@ -542,7 +557,7 @@ for artist in db.execute(query):
         edit_note = ' '.join(all_reasons)
         print ' * country:', country, country_ids[country]
         print ' * edit note:', edit_note
-        time.sleep(15)
+        #time.sleep(1)
         mb.set_artist_country(artist['gid'], country_ids[country], edit_note)
     db.execute("INSERT INTO bot_wp_artist_country (gid) VALUES (%s)", (artist['gid'],))
     print
