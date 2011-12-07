@@ -28,19 +28,21 @@ class MusicBrainzClient(object):
         if resp.geturl() != self.url("/user/" + username):
             raise Exception('unable to login')
 
-    def add_url(self, entity_type, entity_id, link_type_id, url, edit_note):
+    def add_url(self, entity_type, entity_id, link_type_id, url, edit_note, auto=False):
         self.b.open(self.url("/edit/relationship/create_url", entity=entity_id, type=entity_type))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "create_url" in f.action)
         self.b["ar.link_type_id"] = [str(link_type_id)]
         self.b["ar.url"] = str(url)
         self.b["ar.edit_note"] = edit_note.encode('utf8')
+        try: self.b["ar.as_auto_editor"] = ["1"] if auto else []
+        except mechanize.ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
             if "already exists" not in page:
                 raise Exception('unable to post edit')
 
-    def set_artist_country(self, entity_id, country_id, edit_note):
+    def set_artist_country(self, entity_id, country_id, edit_note, auto=False):
         self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         if self.b["edit-artist.country_id"] != ['']:
@@ -48,6 +50,8 @@ class MusicBrainzClient(object):
             return
         self.b["edit-artist.country_id"] = [str(country_id)]
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
+        try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
+        except mechanize.ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
