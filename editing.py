@@ -42,13 +42,42 @@ class MusicBrainzClient(object):
             if "already exists" not in page:
                 raise Exception('unable to post edit')
 
-    def set_artist_country(self, entity_id, country_id, edit_note, auto=False):
-        self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
+    def edit_artist(self, artist, update, edit_note, auto=False):
+        self.b.open(self.url("/artist/%s/edit" % (artist['gid'],)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
-        if self.b["edit-artist.country_id"] != ['']:
-            print " * already set, not changing"
-            return
-        self.b["edit-artist.country_id"] = [str(country_id)]
+        if 'country' in update:
+            if self.b["edit-artist.country_id"] != ['']:
+                print " * country already set, not changing"
+                return
+            self.b["edit-artist.country_id"] = [str(artist['country'])]
+        if 'type' in update:
+            if self.b["edit-artist.type_id"] != ['']:
+                print " * type already set, not changing"
+                return
+            self.b["edit-artist.type_id"] = [str(artist['type'])]
+        if 'gender' in update:
+            if self.b["edit-artist.gender_id"] != ['']:
+                print " * gender already set, not changing"
+                return
+            self.b["edit-artist.gender_id"] = [str(artist['gender'])]
+        if 'begin_date' in update:
+            if self.b["edit-artist.begin_date.year"]:
+                print " * begin date year already set, not changing"
+                return
+            self.b["edit-artist.begin_date.year"] = str(artist['begin_date_year'])
+            if artist['begin_date_month']:
+                self.b["edit-artist.begin_date.month"] = str(artist['begin_date_month'])
+                if artist['begin_date_day']:
+                    self.b["edit-artist.begin_date.day"] = str(artist['begin_date_day'])
+        if 'end_date' in update:
+            if self.b["edit-artist.end_date.year"]:
+                print " * end date year already set, not changing"
+                return
+            self.b["edit-artist.end_date.year"] = str(artist['end_date_year'])
+            if artist['end_date_month']:
+                self.b["edit-artist.end_date.month"] = str(artist['end_date_month'])
+                if artist['end_date_day']:
+                    self.b["edit-artist.end_date.day"] = str(artist['end_date_day'])
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
         except mechanize.ControlNotFoundError: pass
