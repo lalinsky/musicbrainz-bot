@@ -58,6 +58,22 @@ class MusicBrainzClient(object):
             if 'any changes to the data already present' not in page:
                 raise Exception('unable to post edit')
 
+    def set_artist_type(self, entity_id, type_id, edit_note, auto=False):
+        self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        if self.b["edit-artist.type_id"] != ['']:
+            print " * already set, not changing"
+            return
+        self.b["edit-artist.type_id"] = [str(type_id)]
+        self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
+        try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
+        except mechanize.ControlNotFoundError: pass
+        self.b.submit()
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            if 'any changes to the data already present' not in page:
+                raise Exception('unable to post edit')
+
     def edit_url(self, entity_id, old_url, new_url, edit_note, auto=False):
         self.b.open(self.url("/url/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
