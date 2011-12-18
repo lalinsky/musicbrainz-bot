@@ -10,6 +10,7 @@ class MusicBrainzClient(object):
         self.b.set_handle_robots(False)
         self.b.set_debug_redirects(False)
         self.b.set_debug_http(False)
+        self.b.addheaders = [('User-agent', 'musicbrainz-bot')]
         self.login(username, password)
 
     def url(self, path, **kwargs):
@@ -49,6 +50,22 @@ class MusicBrainzClient(object):
             print " * already set, not changing"
             return
         self.b["edit-artist.country_id"] = [str(country_id)]
+        self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
+        try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
+        except mechanize.ControlNotFoundError: pass
+        self.b.submit()
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            if 'any changes to the data already present' not in page:
+                raise Exception('unable to post edit')
+
+    def set_artist_type(self, entity_id, type_id, edit_note, auto=False):
+        self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        if self.b["edit-artist.type_id"] != ['']:
+            print " * already set, not changing"
+            return
+        self.b["edit-artist.type_id"] = [str(type_id)]
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
         except mechanize.ControlNotFoundError: pass
