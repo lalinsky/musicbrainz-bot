@@ -1,4 +1,6 @@
 import re
+import locale
+import sys
 
 
 def mangle_name(s):
@@ -93,4 +95,10 @@ def mw_remove_markup(text):
         elif not in_template and not in_comment:
             result.append(token)
     return ''.join(result)
+
+
+def out(*args):
+    args = [unicode(a).encode(locale.getpreferredencoding()) for a in args]
+    sys.stdout.write(' '.join(args) + '\n')
+    sys.stdout.flush()
 
