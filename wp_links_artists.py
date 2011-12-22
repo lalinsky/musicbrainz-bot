@@ -6,7 +6,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names
+from utils import mangle_name, join_names, out
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -46,12 +46,21 @@ LIMIT 1000
 """
 
 query = """
+WITH
+    artists_wo_wikipedia AS (
+        SELECT a.id
+        FROM artist a
+        LEFT JOIN l_artist_url l ON
+            l.entity0 = a.id AND
+            l.link IN (SELECT id FROM link WHERE link_type = 179)
+        WHERE a.id > 2 AND l.id IS NULL
+    )
 SELECT a.id, a.gid, a.name
-FROM tmp_artists_with_wikipedia ta
+FROM artists_wo_wikipedia ta
 JOIN s_artist a ON ta.id=a.id
 LEFT JOIN bot_wp_artist b ON a.gid = b.gid
 WHERE b.gid IS NULL
-ORDER BY ta.count DESC, a.id
+ORDER BY a.id
 LIMIT 10000
 """
 
@@ -68,7 +77,7 @@ WHERE acn.artist = %s
 """
 
 for a_id, a_gid, a_name in db.execute(query):
-    print 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (a_name, a_gid)
+    out('Looking up artist "%s" http://musicbrainz.org/artist/%s' % (a_name, a_gid))
     matches = wps.query(a_name, defType='dismax', qf='name', rows=50).results
     last_wp_request = time.time()
     for match in matches:
@@ -86,10 +95,13 @@ for a_id, a_gid, a_name in db.execute(query):
         if not pages or 'revisions' not in pages[0]:
             continue
         page = mangle_name(pages[0]['revisions'][0].values()[0])
-        if 'disambiguationpages' in page or 'infoboxalbum' in page:
-            print ' * disambiguation or album page, skipping'
+        if 'redirect' in page:
+            out(' * redirect page, skipping')
             continue
-        print ' * trying article "%s"' % (title,)
+        if 'disambiguationpages' in page or 'infoboxalbum' in page:
+            out(' * disambiguation or album page, skipping')
+            continue
+        out(' * trying article "%s"' % (title,))
         page_title = pages[0]['title']
         found_albums = []
         albums = set([r[0] for r in db.execute(query_artist_albums, (a_id, a_id))])
@@ -105,14 +117,15 @@ for a_id, a_gid, a_name in db.execute(query):
             if len(mangled_album) > 10 and mangled_album in page:
                 found_albums.append(album)
         ratio = len(found_albums) * 1.0 / len(albums)
-        print ' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums))
+        out(' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums)))
         min_ratio = 0.15 if len(a_name) > 15 else 0.3
         if ratio < min_ratio:
             continue
         url = 'http://en.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
-        print ' * linking to %s' % (url,)
-        print ' * edit note: %s' % (text,)
+        out(' * linking to %s' % (url,))
+        out(' * edit note: %s' % (text,))
+        time.sleep(60 * 3)
         mb.add_url("artist", a_gid, 179, url, text)
         break
     db.execute("INSERT INTO bot_wp_artist (gid) VALUES (%s)", (a_gid,))

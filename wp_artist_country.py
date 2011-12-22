@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import datetime
 import re
 import sqlalchemy
 from simplemediawiki import MediaWiki
@@ -9,7 +10,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, mw_remove_markup
+from utils import mangle_name, join_names, mw_remove_markup, out
 import config as cfg
 
 wp_lang = 'fr'
@@ -23,30 +24,48 @@ wp = MediaWiki('http://'+wp_lang+'.wikipedia.org/w/api.php')
 mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
 
 """
-CREATE TABLE bot_wp_artist_country (
+CREATE TABLE bot_wp_artist_data (
     gid uuid NOT NULL,
     processed timestamp with time zone DEFAULT now()
 );
 
-ALTER TABLE ONLY bot_wp_artist_country
-    ADD CONSTRAINT bot_wp_artist_pkey PRIMARY KEY (gid);
+ALTER TABLE ONLY bot_wp_artist_data
+    ADD CONSTRAINT bot_wp_artist_data_pkey PRIMARY KEY (gid);
 
 """
 
 query = """
-SELECT DISTINCT a.id, a.gid, a.name, a.country, u.url
+SELECT DISTINCT
+    a.id, a.gid, a.name, a.country, a.type, a.gender,
+    a.begin_date_year,
+    a.begin_date_month,
+    a.begin_date_day,
+    a.end_date_year,
+    a.end_date_month,
+    a.end_date_day,
+    u.url
 FROM s_artist a
 JOIN l_artist_url l ON l.entity0 = a.id AND l.link IN (SELECT id FROM link WHERE link_type = 179)
 JOIN url u ON u.id = l.entity1
-LEFT JOIN bot_wp_artist_country b ON a.gid = b.gid
+LEFT JOIN bot_wp_artist_data b ON a.gid = b.gid
 WHERE
     b.gid IS NULL AND
-    a.country IS NULL AND
+    (
+        a.country IS NULL OR
+        a.type IS NULL OR
+        ((a.type IS NULL OR a.type = 1) AND (a.begin_date_year IS NULL OR a.gender IS NULL)) OR
+        ((a.type IS NULL OR a.type = 2) AND (a.begin_date_year IS NULL))
+    ) AND
     u.url LIKE 'http://"""+wp_lang+""".wikipedia.org/wiki/%%'
 ORDER BY a.id
-LIMIT 10000
+LIMIT 10
 """
 
+performance_name_query = """
+SELECT count(*) FROM l_artist_artist
+WHERE link IN (SELECT id FROM link WHERE link_type = 108)
+AND entity1 = %s
+"""
 
 def get_page_content_from_cache(title):
     key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
@@ -86,11 +105,14 @@ def extract_page_title(url):
     return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
 
 category_re = {}
-category_re['en'] = re.compile(r'\[\[Category:(.+?)\]\]')
+category_re['en'] = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
 category_re['fr'] = re.compile(r'\[\[Cat\xe9gorie:(.+?)\]\]')
 infobox_re = {}
 infobox_re['en'] = re.compile(r'\{\{Infobox (musical artist|person)[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
 infobox_re['fr'] = re.compile(r'\{\{Infobox (Musique \(artiste\)|Musique classique \(personnalit\xe9\))[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
+persondata_re = {}
+persondata_re['en'] = re.compile(r'\{\{Persondata[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
+persondata_re['fr'] = re.compile(r'\{\{Métadonn\xe9es personne[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
 
 link_countries = {}
 
@@ -147,6 +169,7 @@ link_countries['en'] = {
     'Colombia': 'CO',
     'Comoros': 'KM',
     'Congo': 'CG',
+    'Republic of the Congo': 'CG',
     'Congo, The Democratic Republic of the': 'CD',
     'Cook Islands': 'CK',
     'Costa Rica': 'CR',
@@ -201,6 +224,7 @@ link_countries['en'] = {
     'Iran, Islamic Republic of': 'IR',
     'Iraq': 'IQ',
     'Ireland': 'IE',
+    'Repubic of Ireland': 'IE',
     'Isle of Man': 'IM',
     'Israel': 'IL',
     'Italian people': 'IT',
@@ -733,6 +757,9 @@ category_countries['en'] = {
     'Algerian': 'DZ',
     'Cuban': 'CU',
     'Hong Kong': 'HK',
+    'Singaporean': 'SG',
+    'Filipino': 'PH',
+    'Republic of the Congo': 'CG',
 }
 
 category_countries['fr'] = {
@@ -811,23 +838,75 @@ def parse_infobox(page):
     return info
 
 
+def parse_persondata(page):
+    match = persondata_re[wp_lang].search(page)
+    info = {}
+    if match is None:
+        return info
+    for line in match.group(1).splitlines():
+        if '=' not in line:
+            continue
+        name, value = tuple(s.strip() for s in line.split('=', 1))
+        info[name.lstrip('| ').lower()] = value
+    return info
+
+
 def extract_first_paragraph(page):
     page = mw_remove_markup(page)
     return page.strip().split('\n\n')[0]
 
 
-def determine_country_from_categories(page):
+def extract_page_categories(page):
+    categories = category_re[wp_lang].findall(page)
+    return categories
+
+
+def determine_country_from_categories(categories):
     countries = set()
     relevant_categories = []
-    categories = category_re[wp_lang].findall(page)
     for category in categories:
         category = category.replace('_', ' ')
         for name, code in category_countries[wp_lang].iteritems():
             if name.decode('utf8') in category:
                 countries.add(code)
                 relevant_categories.append(category)
+        for name in link_us_states:
+            if category.endswith('from ' + name):
+                countries.add('US')
+                relevant_categories.append(category)
     reason = 'Belongs to %s.' % join_names('category', relevant_categories)
-    return countries, reason
+    return countries, reason, len(relevant_categories)
+
+
+def determine_gender_from_categories(categories):
+    genders = set()
+    relevant_categories = []
+    for category in categories:
+        if re.search(r'\bmale\b', category, re.I):
+            genders.add('male')
+            relevant_categories.append(category)
+        if re.search(r'\bfemale\b', category, re.I):
+            genders.add('female')
+            relevant_categories.append(category)
+    reason = 'Belongs to %s.' % join_names('category', relevant_categories)
+    return genders, reason
+
+
+def determine_gender_from_text(text):
+    pronouns = re.findall(r'\b(he|she|her|his)\b', text, re.I)
+    num_male_pronouns = 0
+    num_female_pronouns = 0
+    for pronoun in pronouns:
+        if pronoun.lower() in ('she', 'her'):
+            num_female_pronouns += 1
+        else:
+            num_male_pronouns += 1
+    if num_male_pronouns > 2 and num_female_pronouns == 0:
+        return ['male'], 'The first paragraph mentions "he" or "his" %s times' % (num_male_pronouns,)
+        genders.add('male')
+    elif num_female_pronouns > 2 and num_male_pronouns == 0:
+        return ['female'], 'The first paragraph mentions "she" or "her" %s times' % (num_female_pronouns,)
+    return None, ''
 
 
 def find_countries_in_text(countries, relevant_links, text):
@@ -858,12 +937,100 @@ def determine_country_from_infobox(infobox):
     return countries, reason
 
 
+def determine_type_from_page(page):
+    types = set()
+    reasons = []
+    background = page.infobox.get('background', '')
+    if background == 'solo_singer':
+        types.add('person')
+        reasons.append('Infobox has "background = solo_singer".')
+    if page.persondata.get('name'):
+        types.add('person')
+        reasons.append('Contains the "Persondata" infobox.')
+    if background == 'group_or_band':
+        types.add('group')
+        reasons.append('Infobox has "background = group_or_band".')
+    relevant_categories = []
+    for category in page.categories:
+        if category.endswith('groups') or category.startswith('Musical groups'):
+            types.add('group')
+            relevant_categories.append(category)
+    if relevant_categories:
+        reasons.append('Belongs to %s.' % join_names('category', relevant_categories))
+    return types, ' '.join(reasons)
+
+
+def determine_date_from_persondata(persondata, field):
+    reasons = []
+    date = {'year': None, 'month': None, 'day': None}
+    value = persondata.get(field, '')
+    if value:
+        try:
+            d = datetime.datetime.strptime(value, '%B %d, %Y')
+        except ValueError:
+            try:
+                d = datetime.datetime.strptime(value, '%d %B %Y')
+            except ValueError:
+                try:
+                    d = datetime.datetime.strptime(value, '%Y-%m-%d')
+                except ValueError:
+                    d = None
+        if d:
+            reasons.append('Persondata has %s "%s".' % (field, value))
+            date['year'] = d.year
+            date['month'] = d.month
+            date['day'] = d.day
+        else:
+            try:
+                date['year'] = int(value)
+                reasons.append('Persondata has %s "%s".' % (field, value))
+            except ValueError:
+                pass
+    return date, reasons
+
+
+def determine_begin_date(artist, page, is_performance_name):
+    if artist['type'] == 1 and not is_performance_name:
+        date, reasons = determine_date_from_persondata(page.persondata, 'date of birth')
+        if date['year']:
+            return date, reasons
+        relevant_categories = []
+        for category in page.categories:
+            m = re.match(r'(\d{4}) births', category)
+            if m is not None:
+                return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
+    elif artist['type'] == 2:
+        relevant_categories = []
+        for category in page.categories:
+            m = re.match(r'Musical groups established in (\d{4})', category)
+            if m is not None:
+                return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
+    return {'year': None, 'month': None, 'day': None}, []
+
+
+def determine_end_date(artist, page, is_performance_name):
+    if artist['type'] == 1 and not is_performance_name:
+        date, reasons = determine_date_from_persondata(page.persondata, 'date of death')
+        if date['year']:
+            return date, reasons
+        relevant_categories = []
+        for category in page.categories:
+            m = re.match(r'(\d{4}) deaths', category)
+            if m is not None:
+                return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
+    elif artist['type'] == 2:
+        relevant_categories = []
+        for category in page.categories:
+            m = re.match(r'Musical groups disestablished in (\d{4})', category)
+            if m is not None:
+                return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
+    return {'year': None, 'month': None, 'day': None}, []
+
+
 def determine_country_from_text(page):
     countries = set()
     relevant_links = []
-    text = extract_first_paragraph(page)
-    #print text
-    find_countries_in_text(countries, relevant_links, text)
+    find_countries_in_text(countries, relevant_links, page.abstract)
     reason = 'The first paragraph links to %s.' % join_names('', relevant_links)
     return countries, reason
 
@@ -872,19 +1039,35 @@ country_ids = {}
 for id, code in db.execute("SELECT id, iso_code FROM country"):
     country_ids[code] = id
 
-seen = set()
-for artist in db.execute(query):
-    if artist['id'] in seen:
-        continue
-    seen.add(artist['id'])
-    print 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid'])
-    print ' * wiki:', artist['url']
-    page_title = extract_page_title(artist['url'])
-    page = get_page_content(wp, page_title) or ''
-    infobox = parse_infobox(page)
+gender_ids = {}
+for id, code in db.execute("SELECT id, lower(name) FROM gender"):
+    gender_ids[code] = id
+
+artist_type_ids = {}
+for id, code in db.execute("SELECT id, lower(name) FROM artist_type"):
+    artist_type_ids[code] = id
+
+
+class WikiPage(object):
+
+    def __init__(self, title, text):
+        self.title = title
+        self.text = text
+        self.categories = extract_page_categories(text)
+        self.infobox = parse_infobox(text)
+        self.persondata = parse_persondata(text)
+        self.abstract = extract_first_paragraph(text)
+
+    @classmethod
+    def fetch(cls, url):
+        page_title = extract_page_title(artist['url'])
+        return cls(page_title, get_page_content(wp, page_title) or '')
+
+
+def determine_country(page):
     all_countries = set()
     all_reasons = []
-    countries, reason = determine_country_from_infobox(infobox)
+    countries, reason = determine_country_from_infobox(page.infobox)
     if countries:
         all_countries.update(countries)
         all_reasons.append(reason)
@@ -892,27 +1075,132 @@ for artist in db.execute(query):
     if countries:
         all_countries.update(countries)
         all_reasons.append(reason)
-    countries, reason = determine_country_from_categories(page)
+    countries, reason, category_count = determine_country_from_categories(page.categories)
     has_categories = False
     if countries:
         all_countries.update(countries)
         all_reasons.append(reason)
         has_categories = True
-    can_add = True
     if len(all_reasons) < 2 or not all_countries or not has_categories:
-        print ' * not enough sources', all_countries, all_reasons
-        can_add = False
+        out(' * not enough sources for countries', all_countries, all_reasons)
+        return None, []
     if len(all_countries) > 1:
-        print ' * conflicting countries', all_countries, all_reasons
-        can_add = False
-    if can_add:
-        country = list(all_countries)[0]
-        all_reasons = ['From %s.' % (artist['url'],)] + all_reasons
-        edit_note = ' '.join(all_reasons)
-        print ' * country:', country, country_ids[country]
-        print ' * edit note:', edit_note
-        #time.sleep(1)
-        mb.set_artist_country(artist['gid'], country_ids[country], edit_note)
-    db.execute("INSERT INTO bot_wp_artist_country (gid) VALUES (%s)", (artist['gid'],))
+        out(' * conflicting countries', all_countries, all_reasons)
+        return None, []
+    country = list(all_countries)[0]
+    country_id = country_ids[country]
+    out(' * new country:', country, country_id)
+    return country_id, all_reasons
+
+
+def determine_gender(page):
+    all_genders = set()
+    all_reasons = []
+    genders, reason = determine_gender_from_categories(page.categories)
+    if genders:
+        all_genders.update(genders)
+        all_reasons.append(reason)
+    genders, reason = determine_gender_from_text(page.abstract)
+    if genders:
+        all_genders.update(genders)
+        all_reasons.append(reason)
+    if not all_reasons:
+        out(' * not enough sources for genders')
+        return None, []
+    if len(all_genders) > 1:
+        out(' * conflicting genders', all_genders, all_reasons)
+        return None, []
+    gender = list(all_genders)[0]
+    gender_id = gender_ids[gender]
+    out(' * new gender:', gender, gender_id)
+    return gender_id, all_reasons
+
+
+def determine_type(page):
+    all_types = set()
+    all_reasons = []
+    types, reason = determine_type_from_page(page)
+    if types:
+        all_types.update(types)
+        all_reasons.append(reason)
+    if not all_reasons:
+        out(' * not enough sources for types')
+        return None, []
+    if len(all_types) > 1:
+        out(' * conflicting types', all_types, all_reasons)
+        return None, []
+    type = list(all_types)[0]
+    type_id = artist_type_ids[type]
+    out(' * new type:', type, type_id)
+    return type_id, all_reasons
+
+
+seen = set()
+for artist in db.execute(query):
+    if artist['id'] in seen:
+        continue
+    seen.add(artist['id'])
+    out('Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid']))
+    out(' * wiki:', artist['url'])
+
+    artist = dict(artist)
+    update = set()
+    reasons = []
+
+    page = WikiPage.fetch(artist['url'])
+
+    if not artist['country']:
+        country_id, country_reasons = determine_country(page)
+        if country_id:
+            artist['country'] = country_id
+            update.add('country')
+            reasons.append(('COUNTRY', country_reasons))
+
+    if not artist['type']:
+        type_id, type_reasons = determine_type(page)
+        if type_id:
+            artist['type'] = type_id
+            update.add('type')
+            reasons.append(('TYPE', type_reasons))
+
+    if not artist['gender'] and artist['type'] == 1:
+        gender_id, gender_reasons = determine_gender(page)
+        if gender_id:
+            artist['gender'] = gender_id
+            update.add('gender')
+            reasons.append(('GENDER', gender_reasons))
+
+    is_performance_name = False
+    if artist['type'] == 1:
+        is_performance_name = db.execute(performance_name_query, artist['id']).scalar() > 0
+        print " * checking for performance name", is_performance_name
+
+    if not artist['begin_date_year'] and not artist['end_date_year']:
+        begin_date, begin_date_reasons = determine_begin_date(artist, page, is_performance_name)
+        if begin_date['year']:
+            out(" * new begin date", begin_date)
+            artist['begin_date_year'] = begin_date['year']
+            artist['begin_date_month'] = begin_date['month']
+            artist['begin_date_day'] = begin_date['day']
+            update.add('begin_date')
+            reasons.append(('BEGIN DATE', begin_date_reasons))
+        end_date, end_date_reasons = determine_end_date(artist, page, is_performance_name)
+        if end_date['year']:
+            out(" * new end date", end_date)
+            artist['end_date_year'] = end_date['year']
+            artist['end_date_month'] = end_date['month']
+            artist['end_date_day'] = end_date['day']
+            update.add('end_date')
+            reasons.append(('END DATE', end_date_reasons))
+
+    if update:
+        edit_note = 'From %s' % (artist['url'],)
+        for field, reason in reasons:
+            edit_note += '\n\n%s:\n%s' % (field, ' '.join(reason))
+        out(' * edit note:', edit_note.replace('\n', ' '))
+        time.sleep(10)
+        mb.edit_artist(artist, update, edit_note)
+
+    db.execute("INSERT INTO bot_wp_artist_data (gid) VALUES (%s)", (artist['gid'],))
     print
 

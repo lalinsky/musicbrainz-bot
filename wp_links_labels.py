@@ -100,6 +100,7 @@ for id, gid, name in db.execute(query):
         text = 'Matched based on the name. The page mentions %s.' % (join_names('artist', found_artists),)
         print ' * linking to %s' % (url,)
         print ' * edit note: %s' % (text,)
+        time.sleep(60)
         mb.add_url("label", gid, 216, url, text)
         break
     db.execute("INSERT INTO bot_wp_label (gid) VALUES (%s)", (gid,))
