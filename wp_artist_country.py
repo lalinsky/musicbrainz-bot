@@ -1,7 +1,6 @@
 import os
 import re
 import sqlalchemy
-import solr
 from simplemediawiki import MediaWiki
 from editing import MusicBrainzClient
 import pprint
@@ -15,9 +14,19 @@ db = engine.connect()
 db.execute("SET search_path TO musicbrainz")
 
 wp = MediaWiki('http://en.wikipedia.org/w/api.php')
-wps = solr.SolrConnection('http://localhost:8983/solr/wikipedia')
 
 mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
+
+"""
+CREATE TABLE bot_wp_artist_country (
+    gid uuid NOT NULL,
+    processed timestamp with time zone DEFAULT now()
+);
+
+ALTER TABLE ONLY bot_wp_artist_country
+    ADD CONSTRAINT bot_wp_artist_pkey PRIMARY KEY (gid);
+
+"""
 
 query = """
 SELECT DISTINCT a.id, a.gid, a.name, a.country, u.url
