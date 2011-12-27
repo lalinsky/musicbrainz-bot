@@ -14,6 +14,7 @@ from utils import mangle_name, join_names, mw_remove_markup, out
 import config as cfg
 
 wp_lang = 'fr'
+CHECK_PERFORMANCE_NAME = False
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
 db = engine.connect()
@@ -1207,7 +1208,7 @@ for artist in db.execute(query):
             reasons.append(('GENDER', gender_reasons))
 
     is_performance_name = False
-    if artist['type'] == 1:
+    if artist['type'] == 1 and CHECK_PERFORMANCE_NAME:
         is_performance_name = db.execute(performance_name_query, artist['id']).scalar() > 0
         out(" * checking for performance name", is_performance_name)
 
