@@ -58,7 +58,7 @@ WHERE
     ) AND
     u.url LIKE 'http://"""+wp_lang+""".wikipedia.org/wiki/%%'
 ORDER BY a.id
-LIMIT 10
+LIMIT 20
 """
 
 performance_name_query = """
@@ -107,12 +107,21 @@ def extract_page_title(url):
 category_re = {}
 category_re['en'] = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
 category_re['fr'] = re.compile(r'\[\[Cat\xe9gorie:(.+?)\]\]')
+
 infobox_re = {}
 infobox_re['en'] = re.compile(r'\{\{Infobox (musical artist|person)[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
 infobox_re['fr'] = re.compile(r'\{\{Infobox (Musique \(artiste\)|Musique classique \(personnalit\xe9\))[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
+
 persondata_re = {}
 persondata_re['en'] = re.compile(r'\{\{Persondata[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
 persondata_re['fr'] = re.compile(r'\{\{Métadonn\xe9es personne[^|]*((?:[^{}].*?|\{\{.*?\}\})*)\}\}', re.DOTALL)
+
+pronouns_re = {}
+pronouns_re['en'] = re.compile(r'\b(he|she|her|his)\b', re.I)
+pronouns_re['fr'] = re.compile(r'\b(il|elle)\b', re.I)
+pronouns_female = {}
+pronouns_female['en'] = ('she', 'her')
+pronouns_female['fr'] = ('elle')
 
 link_countries = {}
 
@@ -824,6 +833,22 @@ infobox_fields_country = {}
 infobox_fields_country['en'] = ['origin', 'born', 'birth_place']
 infobox_fields_country['fr'] = ['naissance lieu', 'décès lieu', 'nationalité', 'pays origine']
 
+infobox_fields_background = {
+    'en': 'background',
+    'fr': 'charte',
+}
+
+persondata_fields_mapping = {}
+persondata_fields_mapping['fr'] = {
+    'nom': 'name',
+    'noms alternatifs': 'alternatives names',
+    'courte description': 'short description',
+    'date de naissance': 'date of birth',
+    'lieu de naissance': 'place of birth',
+    'date de décès': 'date of death',
+    'lieu de décès': 'place of death',
+}
+
 def parse_infobox(page):
     match = infobox_re[wp_lang].search(page)
     info = {}
@@ -847,7 +872,11 @@ def parse_persondata(page):
         if '=' not in line:
             continue
         name, value = tuple(s.strip() for s in line.split('=', 1))
-        info[name.lstrip('| ').lower()] = value
+        name = name.lstrip('| ').lower()
+        if len(persondata_fields_mapping[wp_lang][name]) > 1:
+            name = persondata_fields_mapping[wp_lang][name]
+        out("  - persondata: %s = %s" % (name, value))
+        info[name] = value
     return info
 
 
@@ -893,19 +922,19 @@ def determine_gender_from_categories(categories):
 
 
 def determine_gender_from_text(text):
-    pronouns = re.findall(r'\b(he|she|her|his)\b', text, re.I)
+    pronouns = pronouns_re[wp_lang].findall(text)
     num_male_pronouns = 0
     num_female_pronouns = 0
     for pronoun in pronouns:
-        if pronoun.lower() in ('she', 'her'):
+        if pronoun.lower() in pronouns_female[wp_lang]:
             num_female_pronouns += 1
         else:
             num_male_pronouns += 1
     if num_male_pronouns > 2 and num_female_pronouns == 0:
-        return ['male'], 'The first paragraph mentions "he" or "his" %s times' % (num_male_pronouns,)
+        return ['male'], 'The first paragraph uses male pronouns %s times' % (num_male_pronouns,)
         genders.add('male')
     elif num_female_pronouns > 2 and num_male_pronouns == 0:
-        return ['female'], 'The first paragraph mentions "she" or "her" %s times' % (num_female_pronouns,)
+        return ['female'], 'The first paragraph uses female pronouns %s times' % (num_female_pronouns,)
     return None, ''
 
 
@@ -931,7 +960,7 @@ def determine_country_from_infobox(infobox):
         field = field.decode('utf8')
         text = infobox.get(field, '')
         if len(text) > 0:
-            print "Text from infobox (field=%s): %s" % (field, text)
+            out("Text from infobox (field=%s): %s" % (field, text))
         find_countries_in_text(countries, relevant_links, text)
     reason = 'Infobox links to %s.' % join_names('', relevant_links)
     return countries, reason
@@ -940,21 +969,28 @@ def determine_country_from_infobox(infobox):
 def determine_type_from_page(page):
     types = set()
     reasons = []
-    background = page.infobox.get('background', '')
-    if background == 'solo_singer':
+    background_field = infobox_fields_background[wp_lang]
+    background = page.infobox.get(background_field, '')
+    if background == 'solo_singer' or background == 'vocal' or background == 'instrumentiste':
         types.add('person')
-        reasons.append('Infobox has "background = solo_singer".')
+        reasons.append('Infobox has "'+background_field+' = '+background+'".')
     if page.persondata.get('name'):
         types.add('person')
         reasons.append('Contains the "Persondata" infobox.')
-    if background == 'group_or_band':
+    if background == 'group_or_band' or background == 'groupe':
         types.add('group')
-        reasons.append('Infobox has "background = group_or_band".')
+        reasons.append('Infobox has "'+background_field+' = '+background+'".')
     relevant_categories = []
     for category in page.categories:
-        if category.endswith('groups') or category.startswith('Musical groups'):
-            types.add('group')
-            relevant_categories.append(category)
+        if wp_lang == 'fr':
+            if category.startswith('Groupe'):
+                types.add('group')
+                relevant_categories.append(category)
+        else:
+            if category.endswith('groups') or category.startswith('Musical groups'):
+                types.add('group')
+                relevant_categories.append(category)
+
     if relevant_categories:
         reasons.append('Belongs to %s.' % join_names('category', relevant_categories))
     return types, ' '.join(reasons)
@@ -1173,7 +1209,7 @@ for artist in db.execute(query):
     is_performance_name = False
     if artist['type'] == 1:
         is_performance_name = db.execute(performance_name_query, artist['id']).scalar() > 0
-        print " * checking for performance name", is_performance_name
+        out(" * checking for performance name", is_performance_name)
 
     if not artist['begin_date_year'] and not artist['end_date_year']:
         begin_date, begin_date_reasons = determine_begin_date(artist, page, is_performance_name)
