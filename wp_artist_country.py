@@ -24,6 +24,14 @@ wp = MediaWiki('http://'+wp_lang+'.wikipedia.org/w/api.php')
 
 mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+
 """
 CREATE TABLE bot_wp_artist_data (
     gid uuid NOT NULL,
@@ -1119,14 +1127,14 @@ def determine_country(page):
         all_reasons.append(reason)
         has_categories = True
     if len(all_reasons) < 2 or not all_countries or not has_categories:
-        out(' * not enough sources for countries', all_countries, all_reasons)
+        out(bcolors.WARNING + ' * not enough sources for countries' + bcolors.ENDC, all_countries, all_reasons)
         return None, []
     if len(all_countries) > 1:
-        out(' * conflicting countries', all_countries, all_reasons)
+        out(bcolors.FAIL + ' * conflicting countries' + bcolors.ENDC, all_countries, all_reasons)
         return None, []
     country = list(all_countries)[0]
     country_id = country_ids[country]
-    out(' * new country:', country, country_id)
+    out(bcolors.OKGREEN + ' * new country: ' + bcolors.ENDC, country, country_id)
     return country_id, all_reasons
 
 
@@ -1142,14 +1150,14 @@ def determine_gender(page):
         all_genders.update(genders)
         all_reasons.append(reason)
     if not all_reasons:
-        out(' * not enough sources for genders')
+        out(bcolors.WARNING + ' * not enough sources for genders' + bcolors.ENDC)
         return None, []
     if len(all_genders) > 1:
-        out(' * conflicting genders', all_genders, all_reasons)
+        out(bcolors.FAIL + ' * conflicting genders' + bcolors.ENDC, all_genders, all_reasons)
         return None, []
     gender = list(all_genders)[0]
     gender_id = gender_ids[gender]
-    out(' * new gender:', gender, gender_id)
+    out(bcolors.OKGREEN + ' * new gender:' + bcolors.ENDC, gender, gender_id)
     return gender_id, all_reasons
 
 
@@ -1161,14 +1169,14 @@ def determine_type(page):
         all_types.update(types)
         all_reasons.append(reason)
     if not all_reasons:
-        out(' * not enough sources for types')
+        out(bcolors.WARNING + ' * not enough sources for types' + bcolors.ENDC)
         return None, []
     if len(all_types) > 1:
-        out(' * conflicting types', all_types, all_reasons)
+        out(bcolors.FAIL + ' * conflicting types' + bcolors.ENDC, all_types, all_reasons)
         return None, []
     type = list(all_types)[0]
     type_id = artist_type_ids[type]
-    out(' * new type:', type, type_id)
+    out(bcolors.OKGREEN + ' * new type:' + bcolors.ENDC, type, type_id)
     return type_id, all_reasons
 
 
@@ -1177,7 +1185,7 @@ for artist in db.execute(query):
     if artist['id'] in seen:
         continue
     seen.add(artist['id'])
-    out('Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid']))
+    out(bcolors.OKBLUE + 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid']) + bcolors.ENDC)
     out(' * wiki:', artist['url'])
 
     artist = dict(artist)
