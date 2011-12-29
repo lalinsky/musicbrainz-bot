@@ -64,6 +64,10 @@ ORDER BY a.id
 LIMIT 10000
 """
 
+"""
+5c31333c-ea95-4cef-adcc-0c8cf56acf55
+"""
+
 query_artist_albums = """
 SELECT rg.name
 FROM s_release_group rg
@@ -94,14 +98,24 @@ for a_id, a_gid, a_name in db.execute(query):
         pages = resp['query']['pages'].values()
         if not pages or 'revisions' not in pages[0]:
             continue
-        page = mangle_name(pages[0]['revisions'][0].values()[0])
+        out(' * trying article "%s"' % (title,))
+        page_orig = pages[0]['revisions'][0].values()[0]
+        page = mangle_name(page_orig)
         if 'redirect' in page:
             out(' * redirect page, skipping')
             continue
-        if 'disambiguationpages' in page or 'infoboxalbum' in page:
-            out(' * disambiguation or album page, skipping')
+        if 'disambiguation' in title:
+            out(' * disambiguation page, skipping')
             continue
-        out(' * trying article "%s"' % (title,))
+        if '{{disambig' in page_orig.lower():
+            out(' * disambiguation page, skipping')
+            continue
+        if 'disambiguationpages' in page:
+            out(' * disambiguation page, skipping')
+            continue
+        if 'infoboxalbum' in page:
+            out(' * album page, skipping')
+            continue
         page_title = pages[0]['title']
         found_albums = []
         albums = set([r[0] for r in db.execute(query_artist_albums, (a_id, a_id))])
@@ -114,7 +128,7 @@ for a_id, a_gid, a_name in db.execute(query):
             continue
         for album in albums:
             mangled_album = mangle_name(album)
-            if len(mangled_album) > 10 and mangled_album in page:
+            if len(mangled_album) > 6 and mangled_album in page:
                 found_albums.append(album)
         ratio = len(found_albums) * 1.0 / len(albums)
         out(' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums)))
@@ -125,7 +139,7 @@ for a_id, a_gid, a_name in db.execute(query):
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
         out(' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
-        time.sleep(60 * 3)
+        time.sleep(60 * 10)
         mb.add_url("artist", a_gid, 179, url, text)
         break
     db.execute("INSERT INTO bot_wp_artist (gid) VALUES (%s)", (a_gid,))
