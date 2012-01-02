@@ -10,7 +10,7 @@ class MusicBrainzClient(object):
         self.b.set_handle_robots(False)
         self.b.set_debug_redirects(False)
         self.b.set_debug_http(False)
-        self.b.addheaders = [('User-agent', 'musicbrainz-bot')]
+        self.b.addheaders = [('User-agent', 'musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
         self.login(username, password)
 
     def url(self, path, **kwargs):
