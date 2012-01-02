@@ -8,7 +8,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, out
+from utils import mangle_name, join_names, out, colored_out, bcolors
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -95,7 +95,7 @@ params = []
 params.extend(acceptable_countries_for_lang[wp_lang])
 params.extend((wp_lang, wp_lang))
 for a_id, a_gid, a_name in db.execute(query, params):
-    out('Looking up artist "%s" http://musicbrainz.org/artist/%s' % (a_name, a_gid))
+    colored_out(bcolors.OKBLUE, 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (a_name, a_gid))
     matches = wps.query(a_name, defType='dismax', qf='name', rows=50).results
     last_wp_request = time.time()
     for match in matches:
@@ -141,7 +141,7 @@ for a_id, a_gid, a_name in db.execute(query, params):
             continue
         url = 'http://'+wp_lang+'.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
-        out(' * linking to %s' % (url,))
+        colored_out(bcolors.OKGREEN, ' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
         time.sleep(60 * 3)
         mb.add_url("artist", a_gid, 179, url, text)
