@@ -926,6 +926,12 @@ def determine_gender_from_categories(categories):
         if re.search(r'\bfemale\b', category, re.I):
             genders.add('female')
             relevant_categories.append(category)
+        if re.search(r'^(Chanteur|Acteur|Animateur)\b', category, re.I):
+            genders.add('male')
+            relevant_categories.append(category)
+        if re.search(r'^(Chanteuse|Actrice|Animatrice)\b', category, re.I):
+            genders.add('female')
+            relevant_categories.append(category)
     reason = 'Belongs to %s.' % join_names('category', relevant_categories)
     return genders, reason
 
