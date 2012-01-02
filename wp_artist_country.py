@@ -42,6 +42,7 @@ WHERE
         ((a.type IS NULL OR a.type = 1) AND (a.begin_date_year IS NULL OR a.gender IS NULL)) OR
         ((a.type IS NULL OR a.type = 2) AND (a.begin_date_year IS NULL))
     ) AND
+    l.edits_pending = 0 AND
     u.url LIKE 'http://en.wikipedia.org/wiki/%%'
 ORDER BY a.id
 LIMIT 10000
@@ -468,6 +469,7 @@ category_countries = {
     'Singaporean': 'SG',
     'Filipino': 'PH',
     'Republic of the Congo': 'CG',
+    'Mozambican': 'MZ',
 }
 
 
