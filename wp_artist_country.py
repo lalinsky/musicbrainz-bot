@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import sys
 import os
 import datetime
 import re
@@ -13,14 +14,15 @@ import time
 from utils import mangle_name, join_names, mw_remove_markup, out, colored_out, bcolors
 import config as cfg
 
-wp_lang = 'fr'
+wp_lang = sys.argv[1] if len(sys.argv) > 1 else 'en'
+
 CHECK_PERFORMANCE_NAME = False
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
 db = engine.connect()
 db.execute("SET search_path TO musicbrainz")
 
-wp = MediaWiki('http://'+wp_lang+'.wikipedia.org/w/api.php')
+wp = MediaWiki('http://%s.wikipedia.org/w/api.php' % wp_lang)
 
 mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
 
@@ -101,7 +103,7 @@ def get_page_content(wp, title):
 
 
 def extract_page_title(url):
-    prefix = 'http://' + wp_lang + '.wikipedia.org/wiki/'
+    prefix = 'http://%s.wikipedia.org/wiki/' % wp_lang
     if not url.startswith(prefix):
         return None
     return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
