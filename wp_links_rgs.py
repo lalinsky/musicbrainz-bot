@@ -6,7 +6,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, out
+from utils import mangle_name, join_names, out, get_page_content, extract_page_title
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -36,7 +36,7 @@ WITH
         LEFT JOIN l_release_group_url l ON
             l.entity0 = a.id AND
             l.link IN (SELECT id FROM link WHERE link_type = 89)
-        WHERE a.artist_credit > 2 AND l.id IS NULL AND a.type = (SELECT id FROM release_group_type WHERE name='Album')
+        WHERE a.artist_credit > 2 AND l.id IS NULL AND (a.type IS NULL OR a.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix')))
         ORDER BY a.artist_credit, a.id
         LIMIT 100000
     )
@@ -60,9 +60,15 @@ WHERE r.release_group = %s
 """
 category_re = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
 
+def escape_query(s):
+    s = re.sub(r'\bOR\b', 'or', s)
+    s = re.sub(r'\bAND\b', 'and', s)
+    s = re.sub(r'\+', '\\+', s)
+    return s
+
 for rg_id, rg_gid, rg_name, ac_name in db.execute(query):
     out('Looking up release group "%s" http://musicbrainz.org/release-group/%s' % (rg_name, rg_gid))
-    matches = wps.query(rg_name, defType='dismax', qf='name', rows=50).results
+    matches = wps.query(escape_query(rg_name), defType='dismax', qf='name', rows=100).results
     last_wp_request = time.time()
     for match in matches:
         title = match['name']
@@ -72,14 +78,12 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query):
         if delay < 1.0:
             time.sleep(1.0 - delay)
         last_wp_request = time.time()
-        resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title, 'rvprop': 'content'})
-        pages = resp['query']['pages'].values()
-        if not pages or 'revisions' not in pages[0]:
+        page_orig = get_page_content(wp, title)
+        if not page_orig:
             continue
-        page_title = pages[0]['title']
+        page_title = title
         url = 'http://en.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
         out(' * trying article %s' % (url,))
-        page_orig = pages[0]['revisions'][0].values()[0]
         page = mangle_name(page_orig)
         if 'redirect' in page:
             out(' * redirect page, skipping')
@@ -99,6 +103,9 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query):
             if category.lower().endswith(' albums'):
                 is_album_page = True
                 break
+            #if category.lower().endswith(' singles'):
+            #    is_album_page = True
+            #    break
             if category.lower().endswith(' soundtracks'):
                 is_album_page = True
                 break
@@ -126,14 +133,15 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query):
                 out(" * track %s not found" % (track,))
         ratio = len(found_tracks) * 1.0 / len(tracks)
         out(' * ratio: %s, has tracks: %s, found tracks: %s' % (ratio, len(tracks), len(found_tracks)))
-        min_ratio = 0.8 if len(rg_name) > 4 else 1.0
+        min_ratio = 0.7 if len(rg_name) > 4 else 1.0
         if ratio < min_ratio:
             continue
+        auto = ratio > 0.75
         text = 'Matched based on the name. The page mentions artist "%s" and %s.' % (ac_name, join_names('track', found_tracks),)
         out(' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
-        time.sleep(30)
-        mb.add_url("release_group", rg_gid, 89, url, text)
+        time.sleep(5)
+        mb.add_url("release_group", rg_gid, 89, url, text, auto=auto)
         break
     db.execute("INSERT INTO bot_wp_rg (gid) VALUES (%s)", (rg_gid,))
 
