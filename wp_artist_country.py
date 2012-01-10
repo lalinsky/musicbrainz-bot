@@ -29,11 +29,12 @@ mb = MusicBrainzClient(cfg.MB_USERNAME, cfg.MB_PASSWORD, cfg.MB_SITE)
 """
 CREATE TABLE bot_wp_artist_data (
     gid uuid NOT NULL,
+    lang character varying(2),
     processed timestamp with time zone DEFAULT now()
 );
 
 ALTER TABLE ONLY bot_wp_artist_data
-    ADD CONSTRAINT bot_wp_artist_data_pkey PRIMARY KEY (gid);
+    ADD CONSTRAINT bot_wp_artist_data_pkey PRIMARY KEY (gid, lang);
 
 """
 
@@ -831,7 +832,8 @@ category_countries['fr'] = {
     'cubain': 'CU',
     'Hong Kong': 'HK',
     'tunisien': 'TN',
-    'monégasque': 'MC'
+    'monégasque': 'MC',
+    'breton': 'FR'
 }
 
 infobox_fields_country = {}
@@ -878,7 +880,7 @@ def parse_persondata(page):
             continue
         name, value = tuple(s.strip() for s in line.split('=', 1))
         name = name.lstrip('| ').lower()
-        if len(persondata_fields_mapping[wp_lang][name]) > 1:
+        if wp_lang in persondata_fields_mapping and len(persondata_fields_mapping[wp_lang][name]) > 1:
             name = persondata_fields_mapping[wp_lang][name]
         out("  - persondata: %s = %s" % (name, value))
         info[name] = value
@@ -1248,6 +1250,6 @@ for artist in db.execute(query):
         time.sleep(60 * 2)
         mb.edit_artist(artist, update, edit_note)
 
-    db.execute("INSERT INTO bot_wp_artist_data (gid) VALUES (%s)", (artist['gid'],))
+    db.execute("INSERT INTO bot_wp_artist_data (gid, lang) VALUES (%s, %s)", (artist['gid'], wp_lang))
     print
 
