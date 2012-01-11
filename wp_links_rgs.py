@@ -101,6 +101,7 @@ category_re['fr'] = re.compile(r'\[\[Cat\xe9gorie:(.+?)\]\]')
 def escape_query(s):
     s = re.sub(r'\bOR\b', 'or', s)
     s = re.sub(r'\bAND\b', 'and', s)
+    s = re.sub(r'\bNOT\b', 'not', s)
     s = re.sub(r'\+', '\\+', s)
     return s
 
