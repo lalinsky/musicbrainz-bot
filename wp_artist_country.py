@@ -11,7 +11,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, mw_remove_markup, out, colored_out, bcolors
+from utils import mangle_name, join_names, mw_remove_markup, out, colored_out, bcolors, get_page_content
 import config as cfg
 
 wp_lang = sys.argv[1] if len(sys.argv) > 1 else 'en'
@@ -71,43 +71,6 @@ SELECT count(*) FROM l_artist_artist
 WHERE link IN (SELECT id FROM link WHERE link_type = 108)
 AND entity1 = %s
 """
-
-def get_page_content_from_cache(title):
-    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
-    file = os.path.join('wiki-cache', wp_lang, key[0], key)
-    if os.path.exists(file):
-        return open(file).read().decode('utf8')
-
-
-def add_page_content_to_cache(title, content):
-    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
-    dir = os.path.join('wiki-cache', wp_lang, key[0])
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-    file = os.path.join(dir, key)
-    f = open(file, 'w')
-    f.write(content.encode('utf8'))
-    f.close()
-
-
-def get_page_content(wp, title):
-    content = get_page_content_from_cache(title)
-    if content:
-        return content
-    resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title.encode('utf8'), 'rvprop': 'content'})
-    pages = resp['query']['pages'].values()
-    if not pages or 'revisions' not in pages[0]:
-        return None
-    content = pages[0]['revisions'][0].values()[0]
-    add_page_content_to_cache(title, content)
-    return content
-
-
-def extract_page_title(url):
-    prefix = 'http://%s.wikipedia.org/wiki/' % wp_lang
-    if not url.startswith(prefix):
-        return None
-    return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
 
 category_re = {}
 category_re['en'] = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
@@ -747,6 +710,7 @@ category_countries['en'] = {
     'Russian': 'RU',
     'Hungarian': 'HU',
     'Slovak': 'SK',
+    'Slovenian': 'SI',
     'Czech': 'CZ',
     'Ukrainian': 'UA',
     'Turkish': 'TR',
@@ -1108,8 +1072,8 @@ class WikiPage(object):
         self.abstract = extract_first_paragraph(text)
 
     @classmethod
-    def fetch(cls, url):
-        page_title = extract_page_title(artist['url'])
+    def fetch(cls, url, wp_lang):
+        page_title = extract_page_title(artist['url'], wp_lang)
         return cls(page_title, get_page_content(wp, page_title) or '')
 
 
@@ -1196,7 +1160,7 @@ for artist in db.execute(query):
     update = set()
     reasons = []
 
-    page = WikiPage.fetch(artist['url'])
+    page = WikiPage.fetch(artist['url'], wp_lang)
 
     if not artist['country']:
         country_id, country_reasons = determine_country(page)
@@ -1247,7 +1211,7 @@ for artist in db.execute(query):
         for field, reason in reasons:
             edit_note += '\n\n%s:\n%s' % (field, ' '.join(reason))
         out(' * edit note:', edit_note.replace('\n', ' '))
-        time.sleep(60 * 2)
+        time.sleep(10)
         mb.edit_artist(artist, update, edit_note)
 
     db.execute("INSERT INTO bot_wp_artist_data (gid, lang) VALUES (%s, %s)", (artist['gid'], wp_lang))

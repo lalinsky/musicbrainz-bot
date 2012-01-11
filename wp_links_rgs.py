@@ -9,7 +9,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, out, colored_out, bcolors
+from utils import mangle_name, join_names, out, get_page_content, extract_page_title, colored_out, bcolors
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -70,7 +70,7 @@ WITH
             GROUP BY acn.artist_credit HAVING count(c.iso_code) = 1
         ) tc ON rg.artist_credit = tc.artist_credit
         WHERE rg.artist_credit > 2 AND wpl.id IS NULL
-            AND rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'Live'))
+            AND (rg.type IS NULL OR rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix')))
             AND (tc.artist_credit IS NOT NULL """ + (' OR TRUE' if no_country_filter else '') + """)
         ORDER BY rg.artist_credit, rg.id
         LIMIT 100000
@@ -98,9 +98,15 @@ category_re = {}
 category_re['en'] = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
 category_re['fr'] = re.compile(r'\[\[Cat\xe9gorie:(.+?)\]\]')
 
+def escape_query(s):
+    s = re.sub(r'\bOR\b', 'or', s)
+    s = re.sub(r'\bAND\b', 'and', s)
+    s = re.sub(r'\+', '\\+', s)
+    return s
+
 for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
     colored_out(bcolors.OKBLUE, 'Looking up release group "%s" http://musicbrainz.org/release-group/%s' % (rg_name, rg_gid))
-    matches = wps.query(rg_name, defType='dismax', qf='name', rows=50).results
+    matches = wps.query(escape_query(rg_name), defType='dismax', qf='name', rows=100).results
     last_wp_request = time.time()
     for match in matches:
         title = match['name']
@@ -110,14 +116,12 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
         if delay < 1.0:
             time.sleep(1.0 - delay)
         last_wp_request = time.time()
-        resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title.encode('utf8'), 'rvprop': 'content'})
-        pages = resp['query']['pages'].values()
-        if not pages or 'revisions' not in pages[0]:
+        page_orig = get_page_content(wp, title, wp_lang)
+        if not page_orig:
             continue
-        page_title = pages[0]['title']
+        page_title = title
         url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
         colored_out(bcolors.HEADER, ' * trying article %s' % (title,))
-        page_orig = pages[0]['revisions'][0].values()[0]
         page = mangle_name(page_orig)
         if 'redirect' in page:
             out('  => redirect page, skipping')
@@ -144,6 +148,9 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
                 if category.lower().endswith(' soundtracks'):
                     is_album_page = True
                     break
+                #if category.lower().endswith(' singles'):
+                #    is_album_page = True
+                #    break
             if wp_lang == 'fr':
                 if category.startswith('Album '):
                     is_album_page = True
@@ -170,15 +177,16 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
                 found_tracks.append(track)
         ratio = len(found_tracks) * 1.0 / len(tracks)
         out(' * ratio: %s, has tracks: %s, found tracks: %s' % (ratio, len(tracks), len(found_tracks)))
-        min_ratio = 0.8 if len(rg_name) > 4 else 1.0
+        min_ratio = 0.7 if len(rg_name) > 4 else 1.0
         if ratio < min_ratio:
             out('  => ratio too low (min = %s)' % min_ratio)
             continue
+        auto = ratio > 0.75
         text = 'Matched based on the name. The page mentions artist "%s" and %s.' % (ac_name, join_names('track', found_tracks),)
         colored_out(bcolors.OKGREEN, ' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
-        time.sleep(30)
-        mb.add_url("release_group", rg_gid, 89, url, text, True)
+        time.sleep(5)
+        mb.add_url("release_group", rg_gid, 89, url, text, auto=auto)
         break
     db.execute("INSERT INTO bot_wp_rg_link (gid, lang) VALUES (%s, %s)", (rg_gid, wp_lang))
 

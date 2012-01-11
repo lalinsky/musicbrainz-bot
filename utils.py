@@ -1,10 +1,14 @@
+# -*- coding: utf-8 -*-
+
 import re
 import locale
 import sys
-
+import os
+import unicodedata
 
 def mangle_name(s):
-    s = s.lower()
+    s = unaccent(s.lower())
+    s = re.sub(r'\(feat\. [^)]+\)$', '', s)
     return re.sub(r'\W', '', s, flags=re.UNICODE)
 
 
@@ -114,3 +118,61 @@ def colored_out(color, *args):
     args = [unicode(a).encode(locale.getpreferredencoding()) for a in args]
     sys.stdout.write(color + ' '.join(args) + bcolors.ENDC + '\n')
     sys.stdout.flush()
+
+def get_page_content_from_cache(title, wp_lang):
+    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
+    file = os.path.join('wiki-cache', wp_lang, key[0], key)
+    if os.path.exists(file):
+        return open(file).read().decode('utf8')
+
+
+def add_page_content_to_cache(title, content, wp_lang):
+    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
+    dir = os.path.join('wiki-cache', wp_lang, key[0])
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+    file = os.path.join(dir, key)
+    f = open(file, 'w')
+    f.write(content.encode('utf8'))
+    f.close()
+
+
+def get_page_content(wp, title, wp_lang):
+    content = get_page_content_from_cache(title, wp_lang)
+    if content:
+        return content
+    resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title.encode('utf8'), 'rvprop': 'content'})
+    pages = resp['query']['pages'].values()
+    if not pages or 'revisions' not in pages[0]:
+        return None
+    content = pages[0]['revisions'][0].values()[0]
+    add_page_content_to_cache(title, content, wp_lang)
+    return content
+
+
+def extract_page_title(url, wp_lang):
+    prefix = 'http://%s.wikipedia.org/wiki/' % wp_lang
+    if not url.startswith(prefix):
+        return None
+    return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
+
+
+_unaccent_dict = {u'Æ': u'AE', u'æ': u'ae', u'Œ': u'OE', u'œ': u'oe', u'ß': 'ss'}
+_re_latin_letter = re.compile(r"^(LATIN [A-Z]+ LETTER [A-Z]+) WITH")
+def unaccent(string):
+    """Remove accents ``string``."""
+    result = []
+    for char in string:
+        if char in _unaccent_dict:
+            char = _unaccent_dict[char]
+        else:
+            try:
+                name = unicodedata.name(char)
+                match = _re_latin_letter.search(name)
+                if match:
+                    char = unicodedata.lookup(match.group(1))
+            except:
+                pass
+        result.append(char)
+    return "".join(result)
+
