@@ -36,7 +36,7 @@ WITH
         LEFT JOIN l_release_group_url l ON
             l.entity0 = a.id AND
             l.link IN (SELECT id FROM link WHERE link_type = 89)
-        WHERE a.artist_credit > 2 AND l.id IS NULL AND (a.type IS NULL OR a.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix')))
+        WHERE a.artist_credit > 2 AND l.id IS NULL AND (a.type IS NULL OR a.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix', 'Compilation')))
         ORDER BY a.artist_credit, a.id
         LIMIT 100000
     )
