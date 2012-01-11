@@ -8,7 +8,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, mw_remove_markup, out, get_page_content
+from utils import mangle_name, join_names, mw_remove_markup, out, get_page_content, extract_page_title
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
