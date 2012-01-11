@@ -11,7 +11,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, mw_remove_markup, out, colored_out, bcolors, get_page_content
+from utils import mangle_name, join_names, mw_remove_markup, out, colored_out, bcolors, get_page_content, extract_page_title
 import config as cfg
 
 wp_lang = sys.argv[1] if len(sys.argv) > 1 else 'en'

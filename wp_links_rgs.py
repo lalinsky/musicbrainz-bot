@@ -70,7 +70,7 @@ WITH
             GROUP BY acn.artist_credit HAVING count(c.iso_code) = 1
         ) tc ON rg.artist_credit = tc.artist_credit
         WHERE rg.artist_credit > 2 AND wpl.id IS NULL
-            AND (rg.type IS NULL OR rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix')))
+            AND (rg.type IS NULL OR rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix', 'Compilation')))
             AND (tc.artist_credit IS NOT NULL """ + (' OR TRUE' if no_country_filter else '') + """)
         ORDER BY rg.artist_credit, rg.id
         LIMIT 100000
