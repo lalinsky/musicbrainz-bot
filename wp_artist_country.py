@@ -747,7 +747,6 @@ def determine_type(page):
 
 
 def main():
-    time.sleep(120)
     seen = set()
     for artist in db.execute(query):
         if artist['id'] in seen:
