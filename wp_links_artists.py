@@ -139,7 +139,7 @@ for a_id, a_gid, a_name in db.execute(query):
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
         out(' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
-        time.sleep(60 * 10)
+        time.sleep(60 * 20)
         mb.add_url("artist", a_gid, 179, url, text)
         break
     db.execute("INSERT INTO bot_wp_artist (gid) VALUES (%s)", (a_gid,))
