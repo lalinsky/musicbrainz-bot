@@ -671,7 +671,7 @@ class WikiPage(object):
 
     @classmethod
     def fetch(cls, url):
-        page_title = extract_page_title(artist['url'])
+        page_title = extract_page_title(url)
         return cls(page_title, get_page_content(wp, page_title) or '')
 
 
