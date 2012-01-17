@@ -39,6 +39,7 @@ ALTER TABLE ONLY bot_wp_artist_link
 """
 
 acceptable_countries_for_lang = {
+#    'en': [],
     'en': ['FR', 'MC'],
     'fr': ['FR', 'MC']
 }
@@ -117,7 +118,7 @@ for a_id, a_gid, a_name in db.execute(query, query_params):
         if 'disambiguation' in title:
             out(' * disambiguation page, skipping')
             continue
-        if '{{disambig' in page_orig.lower():
+        if '{{disambig' in page_orig.lower() or '{{disamb' in page_orig.lower():
             out(' * disambiguation page, skipping')
             continue
         if 'disambiguationpages' in page:
