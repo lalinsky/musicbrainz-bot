@@ -70,16 +70,17 @@ WITH
             GROUP BY acn.artist_credit HAVING count(c.iso_code) = 1
         ) tc ON rg.artist_credit = tc.artist_credit
         WHERE rg.artist_credit > 2 AND wpl.id IS NULL
-            AND (rg.type IS NULL OR rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix', 'Compilation')))
+            AND (rg.type IS NULL OR rg.type IN (SELECT id FROM release_group_type WHERE name IN ('Album', 'EP', 'Live', 'Remix', 'Compilation', 'Soundtrack')))
             AND (tc.artist_credit IS NOT NULL """ + (' OR TRUE' if no_country_filter else '') + """)
         ORDER BY rg.artist_credit, rg.id
         LIMIT 100000
     )
-SELECT rg.id, rg.gid, rg.name, ac.name
+SELECT rg.id, rg.gid, rg.name, ac.name, rgt.name
 FROM rgs_wo_wikipedia ta
 JOIN s_release_group rg ON ta.id=rg.id
 JOIN s_artist_credit ac ON rg.artist_credit=ac.id
 LEFT JOIN bot_wp_rg_link b ON rg.gid = b.gid AND b.lang = %s
+LEFT JOIN release_group_type rgt ON rgt.id = rg.type
 WHERE b.gid IS NULL
 ORDER BY rg.artist_credit, rg.id
 LIMIT 1000
@@ -105,7 +106,7 @@ def escape_query(s):
     s = re.sub(r'\+', '\\+', s)
     return s
 
-for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
+for rg_id, rg_gid, rg_name, ac_name, rg_type in db.execute(query, query_params):
     colored_out(bcolors.OKBLUE, 'Looking up release group "%s" http://musicbrainz.org/release-group/%s' % (rg_name, rg_gid))
     matches = wps.query(escape_query(rg_name), defType='dismax', qf='name', rows=100).results
     last_wp_request = time.time()
@@ -180,9 +181,9 @@ for rg_id, rg_gid, rg_name, ac_name in db.execute(query, query_params):
         out(' * ratio: %s, has tracks: %s, found tracks: %s' % (ratio, len(tracks), len(found_tracks)))
         min_ratio = 0.7 if len(rg_name) > 4 else 1.0
         if ratio < min_ratio:
-            out('  => ratio too low (min = %s)' % min_ratio)
+            colored_out(bcolors.WARNING, '  => ratio too low (min = %s)' % min_ratio)
             continue
-        auto = ratio > 0.75
+        auto = ratio > 0.75 and rg_type not in ('Compilation', 'Soundtrack')
         text = 'Matched based on the name. The page mentions artist "%s" and %s.' % (ac_name, join_names('track', found_tracks),)
         colored_out(bcolors.OKGREEN, ' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
