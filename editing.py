@@ -175,3 +175,37 @@ class MusicBrainzClient(object):
 
     def set_release_script(self, entity_id, old_script_id, new_script_id, edit_note, auto=False):
         self._edit_release_information(entity_id, {"script_id": [[str(old_script_id)],[str(new_script_id)]]}, edit_note, auto)
+
+    def set_release_medium_format(self, entity_id, old_format_id, new_format_id, edit_note, auto=False):
+        self.b.open(self.url("/release/%s/edit" % (entity_id,)))
+
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        self.b["barcode_confirm"] = ["1"]
+        self.b.submit(name="step_tracklist")
+
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        attributes = {"mediums.0.format_id": [[str(old_format_id)], [str(new_format_id)]]}
+        changed = False
+        for k, v in attributes.items():
+            if self.b[k] != v[0]:
+                print " * %s has changed, aborting" % k
+                return
+            if self.b[k] != v[1]:
+                changed = True
+                self.b[k] = v[1]
+        if not changed:
+            print " * already set, not changing"
+            return
+        self.b.submit(name="step_editnote")
+        page = self.b.response().read()
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        try:
+            self.b["edit_note"] = edit_note.encode('utf8')
+        except mechanize.ControlNotFoundError:
+            raise Exception('unable to post edit')
+        #try: self.b["as_auto_editor"] = ["1"] if auto else []
+        #except mechanize.ControlNotFoundError: pass
+        self.b.submit(name="save")
+        page = self.b.response().read()
+        if "Release information" not in page:
+            raise Exception('unable to post edit')
