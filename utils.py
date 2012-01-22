@@ -114,6 +114,7 @@ class bcolors:
     WARNING = '\033[93m'
     FAIL = '\033[91m'
     ENDC = '\033[0m'
+    NONE = ''
 
 def colored_out(color, *args):
     args = [unicode(a).encode(locale.getpreferredencoding()) for a in args]

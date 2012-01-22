@@ -39,13 +39,12 @@ ALTER TABLE ONLY bot_wp_artist_link
 """
 
 acceptable_countries_for_lang = {
-#    'en': [],
-    'en': ['FR', 'MC'],
     'fr': ['FR', 'MC']
 }
+#acceptable_countries_for_lang['en'] = acceptable_countries_for_lang['fr']
 
 query_params = []
-no_country_filter = (wp_lang == 'en') and (len(acceptable_countries_for_lang['en']) == 0)
+no_country_filter = (wp_lang == 'en') and ('en' not in acceptable_countries_for_lang or len(acceptable_countries_for_lang['en']) == 0)
 if no_country_filter:
     # Hack to avoid having an SQL error with an empty IN clause ()
     in_country_clause = 'FALSE'
@@ -145,8 +144,8 @@ for a_id, a_gid, a_name in db.execute(query, query_params):
             if len(mangled_album) > 6 and mangled_album in page:
                 found_albums.append(album)
         ratio = len(found_albums) * 1.0 / len(albums)
-        out(' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums)))
         min_ratio = 0.15 if len(a_name) > 15 else 0.3
+        colored_out(bcolors.WARNING if ratio < min_ratio else bcolors.NONE, ' * ratio: %s, has albums: %s, found albums: %s' % (ratio, len(albums), len(found_albums)))
         if ratio < min_ratio:
             continue
         url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, urllib.quote(page_title.encode('utf8').replace(' ', '_')),)

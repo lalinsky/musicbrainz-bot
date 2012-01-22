@@ -38,12 +38,12 @@ ALTER TABLE ONLY bot_wp_rg_link
 
 
 acceptable_countries_for_lang = {
-    'en': ['FR', 'MC'],
     'fr': ['FR', 'MC']
 }
+#acceptable_countries_for_lang['en'] = acceptable_countries_for_lang['fr']
 
 query_params = []
-no_country_filter = (wp_lang == 'en') and (len(acceptable_countries_for_lang['en']) == 0)
+no_country_filter = (wp_lang == 'en') and ('en' not in acceptable_countries_for_lang or len(acceptable_countries_for_lang['en']) == 0)
 if no_country_filter:
     # Hack to avoid having an SQL error with an empty IN clause ()
     in_country_clause = 'FALSE'
