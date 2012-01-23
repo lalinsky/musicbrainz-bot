@@ -144,6 +144,21 @@ class MusicBrainzClient(object):
             if "exists with these attributes" not in page:
                 raise Exception('unable to post edit')
 
+    def merge(self, entity_type, entity_ids, target_id, edit_note):
+        params = [('add-to-merge', id) for id in entity_ids]
+        self.b.open(self.url("/%s/merge_queue" % entity_type), urllib.urlencode(params))
+        page = self.b.response().read()
+        if "You are about to merge" not in page:
+            raise Exception('unable to add items to merge queue')
+
+        params = {'merge.target': target_id, 'submit': 'submit', 'merge.edit_note': edit_note}
+        for idx, val in enumerate(entity_ids):
+            params['merge.merging.%s' % idx] = val
+        self.b.open(self.url("/%s/merge" % entity_type), urllib.urlencode(params))
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            raise Exception('unable to post edit')
+
     def _edit_release_information(self, entity_id, attributes, edit_note, auto=False):
         self.b.open(self.url("/release/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
