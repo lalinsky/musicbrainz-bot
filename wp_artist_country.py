@@ -101,24 +101,24 @@ def main():
 
         if not artist['country']:
             country, country_reasons = determine_country(page)
-            country_id = country_ids[country]
-            if country_id:
+            if country:
+                country_id = country_ids[country]
                 artist['country'] = country_id
                 update.add('country')
                 reasons.append(('COUNTRY', country_reasons))
 
         if not artist['type']:
             type, type_reasons = determine_type(page)
-            type_id = artist_type_ids[type]
-            if type_id:
+            if type:
+                type_id = artist_type_ids[type]
                 artist['type'] = type_id
                 update.add('type')
                 reasons.append(('TYPE', type_reasons))
 
         if not artist['gender'] and artist['type'] == 1:
             gender, gender_reasons = determine_gender(page)
-            gender_id = gender_ids[gender]
-            if gender_id:
+            if gender:
+                gender_id = gender_ids[gender]
                 artist['gender'] = gender_id
                 update.add('gender')
                 reasons.append(('GENDER', gender_reasons))
