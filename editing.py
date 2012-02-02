@@ -185,3 +185,6 @@ class MusicBrainzClient(object):
 
     def set_release_script(self, entity_id, old_script_id, new_script_id, edit_note, auto=False):
         self._edit_release_information(entity_id, {"script_id": [[str(old_script_id)],[str(new_script_id)]]}, edit_note, auto)
+
+    def set_release_language(self, entity_id, old_language_id, new_language_id, edit_note, auto=False):
+        self._edit_release_information(entity_id, {"language_id": [[str(old_language_id)],[str(new_language_id)]]}, edit_note, auto)
