@@ -158,6 +158,7 @@ class MusicBrainzClient(object):
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         changed = False
         for k, v in attributes.items():
+            self.b.form.find_control(k).readonly = False
             if self.b[k] != v[0]:
                 print " * %s has changed, aborting" % k
                 return
