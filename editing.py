@@ -144,11 +144,21 @@ class MusicBrainzClient(object):
             if "exists with these attributes" not in page:
                 raise Exception('unable to post edit')
 
+    def remove_relationship(self, rel_id, entity0_type, entity1_type, edit_note):
+        self.b.open(self.url("/edit/relationship/delete", id=str(rel_id), type0=entity0_type, type1=entity1_type))
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        self.b["confirm.edit_note"] = edit_note.encode('utf8')
+        self.b.submit()
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            raise Exception('unable to post edit')
+
     def _edit_release_information(self, entity_id, attributes, edit_note, auto=False):
         self.b.open(self.url("/release/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         changed = False
         for k, v in attributes.items():
+            self.b.form.find_control(k).readonly = False
             if self.b[k] != v[0]:
                 print " * %s has changed, aborting" % k
                 return
@@ -175,3 +185,6 @@ class MusicBrainzClient(object):
 
     def set_release_script(self, entity_id, old_script_id, new_script_id, edit_note, auto=False):
         self._edit_release_information(entity_id, {"script_id": [[str(old_script_id)],[str(new_script_id)]]}, edit_note, auto)
+
+    def set_release_language(self, entity_id, old_language_id, new_language_id, edit_note, auto=False):
+        self._edit_release_information(entity_id, {"language_id": [[str(old_language_id)],[str(new_language_id)]]}, edit_note, auto)
