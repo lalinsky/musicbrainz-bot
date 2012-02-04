@@ -11,7 +11,7 @@ import urllib
 import time
 from mbbot.wp.wikipage import WikiPage
 from mbbot.wp.analysis import determine_country
-from utils import mangle_name, join_names, out, colored_out, bcolors
+from utils import mangle_name, join_names, out, colored_out, bcolors, escape_query
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -93,7 +93,7 @@ WHERE acn.artist = %s
 
 for artist in db.execute(query, query_params):
     colored_out(bcolors.OKBLUE, 'Looking up artist "%s" http://musicbrainz.org/artist/%s' % (artist['name'], artist['gid']))
-    matches = wps.query(artist['name'], defType='dismax', qf='name', rows=50).results
+    matches = wps.query(escape_query(artist['name']), defType='dismax', qf='name', rows=50).results
     last_wp_request = time.time()
     for match in matches:
         title = match['name']

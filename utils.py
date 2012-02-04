@@ -178,3 +178,9 @@ def unaccent(string):
         result.append(char)
     return "".join(result)
 
+def escape_query(s):
+    s = re.sub(r'\bOR\b', 'or', s)
+    s = re.sub(r'\bAND\b', 'and', s)
+    s = re.sub(r'\bNOT\b', 'not', s)
+    s = re.sub(r'\+', '\\+', s)
+    return s

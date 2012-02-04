@@ -9,7 +9,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, out, get_page_content, extract_page_title, colored_out, bcolors
+from utils import mangle_name, join_names, out, get_page_content, extract_page_title, colored_out, bcolors, escape_query
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -98,13 +98,6 @@ WHERE r.release_group = %s
 category_re = {}
 category_re['en'] = re.compile(r'\[\[Category:(.+?)(?:\|.*?)?\]\]')
 category_re['fr'] = re.compile(r'\[\[Cat\xe9gorie:(.+?)\]\]')
-
-def escape_query(s):
-    s = re.sub(r'\bOR\b', 'or', s)
-    s = re.sub(r'\bAND\b', 'and', s)
-    s = re.sub(r'\bNOT\b', 'not', s)
-    s = re.sub(r'\+', '\\+', s)
-    return s
 
 for rg_id, rg_gid, rg_name, ac_name, rg_type in db.execute(query, query_params):
     colored_out(bcolors.OKBLUE, 'Looking up release group "%s" http://musicbrainz.org/release-group/%s' % (rg_name, rg_gid))
