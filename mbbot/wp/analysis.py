@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import re
+import locale
+import calendar
 from mbbot.data.countries import wp_country_links, wp_us_states_links, demonyms
 from mbbot.data.firstnames import firstname_gender
 from utils import join_names, out, colored_out, bcolors
@@ -12,13 +14,40 @@ pronouns_female = {}
 pronouns_female['en'] = ('she', 'her')
 pronouns_female['fr'] = ('elle')
 
-infobox_fields_country = {}
-infobox_fields_country['en'] = ['origin', 'born', 'birth_place']
-infobox_fields_country['fr'] = ['naissance lieu', 'décès lieu', 'nationalité', 'pays origine']
+infobox_fields = {}
+infobox_fields['country'] = {}
+infobox_fields['country']['en'] = ['origin', 'born', 'birth_place']
+infobox_fields['country']['fr'] = ['naissance lieu', 'décès lieu', 'nationalité', 'pays origine']
 
-infobox_fields_background = {
-    'en': 'background',
-    'fr': 'charte',
+infobox_fields['begin_date'] = {}
+infobox_fields['begin_date']['en'] = 'birth_date'
+infobox_fields['begin_date']['fr'] = 'naissance'
+infobox_fields['end_date'] = {}
+infobox_fields['end_date']['en'] = 'death_date'
+infobox_fields['end_date']['fr'] = 'décès'
+
+infobox_fields['background'] = {}
+infobox_fields['background']['en'] = 'background'
+infobox_fields['background']['fr'] = 'charte'
+
+date_template_re = { 'begin_date': {}, 'end_date': {} }
+date_template_re['begin_date']['en'] = re.compile(r'{{(?:Birth date and age|Birth date|Bda|dob)\|(?P<year>\d+)\|(?P<month>[\d\w]+)\|(?P<day>\d+)', re.I)
+date_template_re['begin_date']['fr'] = re.compile(r'{{Date de naissance\|(?P<day>\d+)\|(?P<month>[\d\w]+)\|(?P<year>\d+)', re.I)
+date_template_re['end_date']['en'] = re.compile(r'{{(?:Death date and age|Dda)\|(?P<year>\d+)\|(?P<month>[\d\w]+)\|(?P<day>\d+)', re.I)
+date_template_re['end_date']['fr'] = re.compile(r'{{Date de d\xe9c\xe8s\|(?P<day>\d+)\|(?P<month>[\d\w]+)\|(?P<year>\d+)', re.I)
+
+date_categories_re = {'person': {'begin': {}, 'end': {}}, 'group': {'begin': {}, 'end': {}}}
+date_categories_re['person']['begin']['en'] = re.compile(r'(\d{4}) births', re.I)
+date_categories_re['person']['end']['en'] = re.compile(r'(\d{4}) deaths', re.I)
+date_categories_re['group']['begin']['en'] = re.compile(r'Musical groups established in (\d{4})', re.I)
+date_categories_re['person']['end']['en'] = re.compile(r'Musical groups disestablished in (\d{4})', re.I)
+date_categories_re['person']['begin']['fr'] = re.compile(r'Naissance en (\d{4})', re.I)
+date_categories_re['person']['end']['fr'] = re.compile(r'Décès en (\d{4})', re.I)
+date_categories_re['group']['begin']['fr'] = re.compile(r'Groupe de musique formé en (\d{4})', re.I)
+
+locales = {
+    'fr': 'fr_FR.UTF-8',
+    'en': 'en_US.UTF-8'
 }
 
 ##################################### Country ###########################################
@@ -84,7 +113,7 @@ def find_countries_in_text(countries, relevant_links, text, lang):
 def determine_country_from_infobox(page):
     countries = set()
     relevant_links = []
-    for field in infobox_fields_country[page.lang]:
+    for field in infobox_fields['country'][page.lang]:
         field = field.decode('utf8')
         text = page.infobox.get(field, '')
         #if len(text) > 0:
@@ -127,10 +156,10 @@ def determine_gender(page):
     colored_out(bcolors.OKGREEN, ' * new gender:', gender)
     return gender, all_reasons
 
-def determine_gender_from_categories(categories):
+def determine_gender_from_categories(page):
     genders = set()
     relevant_categories = []
-    for category in categories:
+    for category in page.categories:
         if re.search(r'\bmale\b', category, re.I):
             genders.add('male')
             relevant_categories.append(category)
@@ -207,7 +236,7 @@ def determine_type(page):
 def determine_type_from_page(page):
     types = set()
     reasons = []
-    background_field = infobox_fields_background[page.lang]
+    background_field = infobox_fields['background'][page.lang]
     background = page.infobox.get(background_field, '')
     if background == 'solo_singer' or background == 'vocal' or background == 'instrumentiste':
         types.add('person')
@@ -237,41 +266,57 @@ def determine_type_from_page(page):
 ##################################### Dates ###########################################
 
 def determine_begin_date(artist, page, is_performance_name):
+    empty_date = {'year': None, 'month': None, 'day': None}
     if artist['type'] == 1 and not is_performance_name:
         date, reasons = determine_date_from_persondata(page.persondata, 'date of birth')
         if date['year']:
             return date, reasons
+        date, reasons = determine_date_from_infobox(page, 'begin_date')
+        if date['year']:
+            return date, reasons
         relevant_categories = []
+        if page.lang not in date_categories_re['person']['begin']:
+            return empty_date, []
         for category in page.categories:
-            m = re.match(r'(\d{4}) births', category)
+            m = re.match(date_categories_re['person']['begin'][page.lang], category)
             if m is not None:
                 return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
     elif artist['type'] == 2:
+        if page.lang not in date_categories_re['group']['begin']:
+            return empty_date, []
         relevant_categories = []
         for category in page.categories:
-            m = re.match(r'Musical groups established in (\d{4})', category)
+            m = re.match(date_categories_re['group']['begin'][page.lang], category)
             if m is not None:
                 return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
-    return {'year': None, 'month': None, 'day': None}, []
-
+            m = re.match(r'Groupe de musique formé en (\d{4})', category)
+    return empty_date, []
 
 def determine_end_date(artist, page, is_performance_name):
+    empty_date = {'year': None, 'month': None, 'day': None}
     if artist['type'] == 1 and not is_performance_name:
         date, reasons = determine_date_from_persondata(page.persondata, 'date of death')
         if date['year']:
             return date, reasons
+        date, reasons = determine_date_from_infobox(page, 'end_date')
+        if date['year']:
+            return date, reasons
+        if page.lang not in date_categories_re['group']['end']:
+            return empty_date, []
         relevant_categories = []
         for category in page.categories:
-            m = re.match(r'(\d{4}) deaths', category)
+            m = re.match(date_categories_re['person']['end'][page.lang], category)
             if m is not None:
                 return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
     elif artist['type'] == 2:
+        if page.lang not in date_categories_re['group']['end']:
+            return empty_date, []
         relevant_categories = []
         for category in page.categories:
-            m = re.match(r'Musical groups disestablished in (\d{4})', category)
+            m = re.match(date_categories_re['group']['begin'][page.lang], category)
             if m is not None:
                 return {'year': int(m.group(1)), 'month': None, 'day': None}, ['Belongs to category "%s"' % category]
-    return {'year': None, 'month': None, 'day': None}, []
+    return empty_date, []
 
 def determine_date_from_persondata(persondata, field):
     reasons = []
@@ -300,3 +345,25 @@ def determine_date_from_persondata(persondata, field):
             except ValueError:
                 pass
     return date, reasons
+
+def determine_date_from_infobox(page, date_type):
+    date = {'year': None, 'month': None, 'day': None}
+    if (date_type not in infobox_fields) or (page.lang not in infobox_fields[date_type]):
+        return date, []
+
+    field = infobox_fields[date_type][page.lang].decode('utf8')
+    info = page.infobox.get(field, '')
+    m = date_template_re[date_type][page.lang].match(info)
+    if m is not None:
+        date = {'year': int(m.group('year')), 'day': int(m.group('day'))}
+        if m.group('month').isdigit():
+            date['month'] = int(m.group('month'))
+        else:
+            try:
+                locale.setlocale(locale.LC_ALL, locales[page.lang])
+                month_number = dict((v,k) for k,v in enumerate(calendar.month_name))
+                date['month'] = month_number[m.group('month').lower()]
+            except ValueError:
+                date['month'] = None
+        return date, ['Infobox has %s.' % info]
+    return date, []

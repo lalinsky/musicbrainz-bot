@@ -128,18 +128,19 @@ def main():
             is_performance_name = db.execute(performance_name_query, artist['id']).scalar() > 0
             out(" * checking for performance name", is_performance_name)
 
-        if not artist['begin_date_year'] and not artist['end_date_year']:
+        if not artist['begin_date_year']:
             begin_date, begin_date_reasons = determine_begin_date(artist, page, is_performance_name)
             if begin_date['year']:
-                out(" * new begin date", begin_date)
+                colored_out(bcolors.OKGREEN, " * new begin date:", begin_date)
                 artist['begin_date_year'] = begin_date['year']
                 artist['begin_date_month'] = begin_date['month']
                 artist['begin_date_day'] = begin_date['day']
                 update.add('begin_date')
                 reasons.append(('BEGIN DATE', begin_date_reasons))
+        if not artist['end_date_year']:
             end_date, end_date_reasons = determine_end_date(artist, page, is_performance_name)
             if end_date['year']:
-                out(" * new end date", end_date)
+                colored_out(bcolors.OKGREEN, " * new end date:", end_date)
                 artist['end_date_year'] = end_date['year']
                 artist['end_date_month'] = end_date['month']
                 artist['end_date_day'] = end_date['day']
