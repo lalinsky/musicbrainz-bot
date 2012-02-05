@@ -153,6 +153,21 @@ class MusicBrainzClient(object):
         if "Thank you, your edit has been" not in page:
             raise Exception('unable to post edit')
 
+    def merge(self, entity_type, entity_ids, target_id, edit_note):
+        params = [('add-to-merge', id) for id in entity_ids]
+        self.b.open(self.url("/%s/merge_queue" % entity_type), urllib.urlencode(params))
+        page = self.b.response().read()
+        if "You are about to merge" not in page:
+            raise Exception('unable to add items to merge queue')
+
+        params = {'merge.target': target_id, 'submit': 'submit', 'merge.edit_note': edit_note}
+        for idx, val in enumerate(entity_ids):
+            params['merge.merging.%s' % idx] = val
+        self.b.open(self.url("/%s/merge" % entity_type), urllib.urlencode(params))
+        page = self.b.response().read()
+        if "Thank you, your edit has been" not in page:
+            raise Exception('unable to post edit')
+
     def _edit_release_information(self, entity_id, attributes, edit_note, auto=False):
         self.b.open(self.url("/release/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
@@ -188,3 +203,38 @@ class MusicBrainzClient(object):
 
     def set_release_language(self, entity_id, old_language_id, new_language_id, edit_note, auto=False):
         self._edit_release_information(entity_id, {"language_id": [[str(old_language_id)],[str(new_language_id)]]}, edit_note, auto)
+
+    def set_release_medium_format(self, entity_id, old_format_id, new_format_id, edit_note, auto=False):
+        self.b.open(self.url("/release/%s/edit" % (entity_id,)))
+
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        self.b["barcode_confirm"] = ["1"]
+        self.b.submit(name="step_tracklist")
+
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        attributes = {"mediums.0.format_id": [[str(old_format_id)], [str(new_format_id)]]}
+        changed = False
+        for k, v in attributes.items():
+            if self.b[k] != v[0]:
+                print " * %s has changed, aborting" % k
+                return
+            if self.b[k] != v[1]:
+                changed = True
+                self.b[k] = v[1]
+        if not changed:
+            print " * already set, not changing"
+            return
+        self.b.submit(name="step_editnote")
+        page = self.b.response().read()
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        try:
+            self.b["edit_note"] = edit_note.encode('utf8')
+        except mechanize.ControlNotFoundError:
+            raise Exception('unable to post edit')
+        #try: self.b["as_auto_editor"] = ["1"] if auto else []
+        #except mechanize.ControlNotFoundError: pass
+        self.b.submit(name="save")
+        page = self.b.response().read()
+        if "Release information" not in page:
+            raise Exception('unable to post edit')
+
