@@ -1,5 +1,56 @@
 import mechanize
 import urllib
+import time
+import re
+from mbbot.guesscase import guess_artist_sort_name
+
+
+def format_time(secs):
+    return '%0d:%02d' % (secs / 60, secs % 60)
+
+
+def album_to_form(album):
+    form = {}
+    form['artist_credit.names.0.artist.name'] = album['artist']
+    form['artist_credit.names.0.name'] = album['artist']
+    if album.get('artist_mbid'):
+        form['artist_credit.names.0.mbid'] = album['artist_mbid']
+    form['name'] = album['title']
+    if album.get('date'):
+        date_parts = album['date'].split('-')
+        if len(date_parts) > 0:
+            form['date.year'] = date_parts[0]
+            if len(date_parts) > 1:
+                form['date.month'] = date_parts[1]
+                if len(date_parts) > 2:
+                    form['date.day'] = date_parts[2]
+    if album.get('label'):
+        form['labels.0.name'] = album['label']
+    if album.get('barcode'):
+        form['barcode'] = album['barcode']
+    for medium_no, medium in enumerate(album['mediums']):
+        form['mediums.%d.format' % medium_no] = medium['format']
+        form['mediums.%d.position' % medium_no] = medium['position']
+        for track_no, track in enumerate(medium['tracks']):
+            form['mediums.%d.track.%d.position' % (medium_no, track_no)] = track['position']
+            form['mediums.%d.track.%d.name' % (medium_no, track_no)] = track['title']
+            form['mediums.%d.track.%d.length' % (medium_no, track_no)] = format_time(track['length'])
+    form['edit_note'] = 'http://www.cdbaby.com/cd/' + album['_id'].split(':')[1]
+    return form
+
+
+def extract_artist_mbid(url):
+    m = re.search(r'/artist/([0-9a-f-]{36})$', url)
+    if m is None:
+        return None
+    return m.group(1)
+
+
+def extract_release_mbid(url):
+    m = re.search(r'/release/([0-9a-f-]{36})$', url)
+    if m is None:
+        return None
+    return m.group(1)
 
 
 class MusicBrainzClient(object):
@@ -29,7 +80,34 @@ class MusicBrainzClient(object):
         if resp.geturl() != self.url("/user/" + username):
             raise Exception('unable to login')
 
-    def add_url(self, entity_type, entity_id, link_type_id, url, edit_note, auto=False):
+    def add_release(self, album, edit_note, auto=False):
+        form = album_to_form(album)
+        self.b.open(self.url("/release/add"), urllib.urlencode(form))
+        time.sleep(2.0)
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/release" in f.action)
+        self.b.submit(name="step_editnote")
+        time.sleep(2.0)
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/release" in f.action)
+        print self.b.response().read()
+        self.b.submit(name="save")
+        release_mbid = extract_release_mbid(self.b.geturl())
+        if not release_mbid:
+            raise Exception('unable to post edit')
+        return release_mbid
+
+    def add_artist(self, artist, edit_note, auto=False):
+        self.b.open(self.url("/artist/create"))
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/artist/create" in f.action)
+        self.b["edit-artist.name"] = artist['name']
+        self.b["edit-artist.sort_name"] = artist.get('sort_name', guess_artist_sort_name(artist['name']))
+        self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
+        self.b.submit()
+        mbid = extract_artist_mbid(self.b.geturl())
+        if not mbid:
+            raise Exception('unable to post edit')
+        return mbid
+
+    def add_url(self, entity_type, entity_id, link_type_id, url, edit_note='', auto=False):
         self.b.open(self.url("/edit/relationship/create_url", entity=entity_id, type=entity_type))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "create_url" in f.action)
         self.b["ar.link_type_id"] = [str(link_type_id)]

@@ -4,13 +4,31 @@ import urllib2
 import config
 import pymongo
 import pprint
+import time
+import random
+import datetime
 from BeautifulSoup import BeautifulSoup
-from guesscase import guess_case, guess_case_title
+from mbbot.guesscase import guess_case, guess_case_title
 
 
 opener = urllib2.build_opener()
 if config.WWW_USER_AGENT:
     opener.addheaders = [('User-Agent', config.WWW_USER_AGENT)]
+
+
+def get_db():
+    mongo = pymongo.Connection()
+    return mongo.mbot
+
+
+def fetch_page(url, html=False):
+    delay = random.randint(5, 60)
+    print "downloading %s (after %s seconds)" % (url, delay)
+    time.sleep(delay)
+    data = opener.open(url).read()
+    if html:
+        data = BeautifulSoup(data)
+    return data
 
 
 def extract_barcode(s):
@@ -45,9 +63,9 @@ def parse_track_title(s):
     return int(track_no), guess_case_title(track_title)
 
 
-def parse_cdbaby_album(url):
-    html = opener.open(url).read()
-    page = BeautifulSoup(html)
+def parse_cdbaby_album(album_id):
+    url = 'http://www.cdbaby.com/cd/%s' % (album_id,)
+    page = fetch_page(url, html=True)
 
     release = {}
 
@@ -101,27 +119,64 @@ def parse_cdbaby_album(url):
     return release
 
 
-mongo = pymongo.Connection()
-db = mongo.mbot
+def find_new_cdbaby_albums(page=1):
+    url = 'http://www.cdbaby.com/New'
+    if page > 1:
+        url += '/p%d' % page
+    db = get_db()
+    page = fetch_page(url, html=True)
+    for a in page.findAll('a', {'class': 'overlay-link'}):
+        album_id = extract_album_id(a['href'])
+        if album_id is not None:
+            key = 'cdbaby:' + album_id
+            if not db.albums.find_one(key):
+                yield album_id
+            else:
+                print 'already have', album_id
 
-url = sys.argv[1]
-key = 'cdbaby:' + extract_album_id(url)
 
-release = db.albums.find_one(key)
-if release is None:
-    release = parse_cdbaby_album(url)
-    release['_id'] = key
-    release['status'] = {
-        'imported': False,
-    }
-    db.albums.save(release)
+def fetch_cdbaby_album(album_id):
+    db = get_db()
+    key = 'cdbaby:' + album_id
+    if not db.albums.find_one(key):
+        album = parse_cdbaby_album(album_id)
+        album['_id'] = key
+        album['status'] = {'imported': False, 'added': datetime.datetime.now()}
+        db.albums.save(album)
 
 
-artist_key = 'cdbaby:' + release['artist_cdbaby_id']
-artist = db.artists.find_one(artist_key)
-if artist is None:
-    artist = {'_id': artist_key}
-    db.artists.save(artist)
+def fetch_new_cdbaby_albums(limit=10, pages_limit=5):
+    albums = 0
+    page = 1
+    while albums < limit and page <= pages_limit:
+        for album_id in find_new_cdbaby_albums(page):
+            fetch_cdbaby_album(album_id)
+            albums += 1
+        page += 1
 
-pprint.pprint(release)
+
+def main():
+    mongo = pymongo.Connection()
+    db = mongo.mbot
+
+    url = sys.argv[1]
+    key = 'cdbaby:' + extract_album_id(url)
+
+    release = db.albums.find_one(key)
+    if release is None:
+        release = parse_cdbaby_album(url)
+        release['_id'] = key
+        release['status'] = {
+            'imported': False,
+        }
+        db.albums.save(release)
+
+
+    artist_key = 'cdbaby:' + release['artist_cdbaby_id']
+    artist = db.artists.find_one(artist_key)
+    if artist is None:
+        artist = {'_id': artist_key}
+        db.artists.save(artist)
+
+    pprint.pprint(release)
 
