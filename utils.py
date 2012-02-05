@@ -107,17 +107,30 @@ def out(*args):
     sys.stdout.write(' '.join(args) + '\n')
     sys.stdout.flush()
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    NONE = ''
 
-def get_page_content_from_cache(title):
-    key = title.encode('ascii', 'xmlcharrefreplace').replace('/', '_')
-    file = os.path.join('enwiki-cache', key[0], key)
+def colored_out(color, *args):
+    args = [unicode(a).encode(locale.getpreferredencoding()) for a in args]
+    sys.stdout.write(color + ' '.join(args) + bcolors.ENDC + '\n')
+    sys.stdout.flush()
+
+def get_page_content_from_cache(title, wp_lang):
+    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
+    file = os.path.join('wiki-cache', wp_lang, key[0], key)
     if os.path.exists(file):
         return open(file).read().decode('utf8')
 
 
-def add_page_content_to_cache(title, content):
-    key = title.encode('ascii', 'xmlcharrefreplace').replace('/', '_')
-    dir = os.path.join('enwiki-cache', key[0])
+def add_page_content_to_cache(title, content, wp_lang):
+    key = title.encode('utf-8', 'xmlcharrefreplace').replace('/', '_')
+    dir = os.path.join('wiki-cache', wp_lang, key[0])
     if not os.path.exists(dir):
         os.mkdir(dir)
     file = os.path.join(dir, key)
@@ -126,21 +139,21 @@ def add_page_content_to_cache(title, content):
     f.close()
 
 
-def get_page_content(wp, title):
-    content = get_page_content_from_cache(title)
+def get_page_content(wp, title, wp_lang):
+    content = get_page_content_from_cache(title, wp_lang)
     if content:
         return content
-    resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title, 'rvprop': 'content'})
+    resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title.encode('utf8'), 'rvprop': 'content'})
     pages = resp['query']['pages'].values()
     if not pages or 'revisions' not in pages[0]:
         return None
     content = pages[0]['revisions'][0].values()[0]
-    add_page_content_to_cache(title, content)
+    add_page_content_to_cache(title, content, wp_lang)
     return content
 
 
-def extract_page_title(url):
-    prefix = 'http://en.wikipedia.org/wiki/'
+def extract_page_title(url, wp_lang):
+    prefix = 'http://%s.wikipedia.org/wiki/' % wp_lang
     if not url.startswith(prefix):
         return None
     return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
@@ -165,3 +178,9 @@ def unaccent(string):
         result.append(char)
     return "".join(result)
 
+def escape_query(s):
+    s = re.sub(r'\bOR\b', 'or', s)
+    s = re.sub(r'\bAND\b', 'and', s)
+    s = re.sub(r'\bNOT\b', 'not', s)
+    s = re.sub(r'\+', '\\+', s)
+    return s
