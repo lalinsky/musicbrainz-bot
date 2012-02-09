@@ -57,6 +57,7 @@ class MusicBrainzClient(object):
 
     def __init__(self, username, password, server="http://musicbrainz.org"):
         self.server = server
+        self.username = username
         self.b = mechanize.Browser()
         self.b.set_handle_robots(False)
         self.b.set_debug_redirects(False)
@@ -316,3 +317,20 @@ class MusicBrainzClient(object):
         if "Release information" not in page:
             raise Exception('unable to post edit')
 
+    def add_edit_note(self, identify, edit_note):
+        '''Adds an edit note to the last (or very recently) made edit. This
+        is necessary e.g. for ISRC submission via web service, as it has no
+        support for edit notes. The "identify" argument is a function
+            function(str, str) -> bool
+        which receives the edit number as first, the raw html body of the edit
+        as second argument, and determines if the note should be added to this
+        edit.'''
+        self.b.open(self.url("/user/%s/edits" % (self.username,)))
+        page = self.b.response().read()
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        edits = re.findall(r'<h2><a href="'+self.server+r'/edit/([0-9]+).*?<div class="edit-details">(.*?)</div>', page, re.S)
+        for i, (edit_nr, text) in enumerate(edits):
+            if identify(edit_nr, text):
+                self.b['enter-vote.vote.%d.edit_note' % i] = edit_note.encode('utf8')
+                break
+        self.b.submit()
