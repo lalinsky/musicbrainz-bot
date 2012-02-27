@@ -158,6 +158,8 @@ def extract_page_title(url, wp_lang):
         return None
     return urllib.unquote(url[len(prefix):].encode('utf8')).decode('utf8')
 
+def quote_page_title(title):
+    return urllib.quote(title.encode('utf8').replace(' ', '_'), '/$,:;@')
 
 _unaccent_dict = {u'Æ': u'AE', u'æ': u'ae', u'Œ': u'OE', u'œ': u'oe', u'ß': 'ss'}
 _re_latin_letter = re.compile(r"^(LATIN [A-Z]+ LETTER [A-Z]+) WITH")
