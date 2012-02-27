@@ -8,7 +8,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, contains_text_in_script
+from utils import mangle_name, join_names, contains_text_in_script, quote_page_title
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -120,7 +120,7 @@ for id, gid, name in db.execute(query):
             continue
         #if ratio < min_ratio:
         #    continue
-        url = 'http://ko.wikipedia.org/wiki/%s' % (urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
+        url = 'http://ko.wikipedia.org/wiki/%s' % (quote_page_title(page_title),)
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
         print ' * linking to %s' % (url,)
         print ' * edit note: %s' % (text,)

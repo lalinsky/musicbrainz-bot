@@ -11,7 +11,7 @@ import urllib
 import time
 from mbbot.wp.wikipage import WikiPage
 from mbbot.wp.analysis import determine_country
-from utils import mangle_name, join_names, out, colored_out, bcolors, escape_query
+from utils import mangle_name, join_names, out, colored_out, bcolors, escape_query, quote_page_title
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -158,7 +158,7 @@ for artist in db.execute(query, query_params):
                 colored_out(bcolors.HEADER, ' * artist country (%s) not compatible with wiki language (%s)' % (country, wp_lang))
                 continue
 
-        url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
+        url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, quote_page_title(page_title),)
         text = 'Matched based on the name. The page mentions %s.' % (join_names('album', found_albums),)
         colored_out(bcolors.OKGREEN, ' * linking to %s' % (url,))
         out(' * edit note: %s' % (text,))
