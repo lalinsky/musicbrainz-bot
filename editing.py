@@ -158,6 +158,11 @@ class MusicBrainzClient(object):
                 self.b["edit-artist.end_date.month"] = str(artist['end_date_month'])
                 if artist['end_date_day']:
                     self.b["edit-artist.end_date.day"] = str(artist['end_date_day'])
+        if 'comment' in update:
+            if self.b["edit-artist.comment"] != '':
+                print " * comment already set, not changing"
+                return
+            self.b["edit-artist.comment"] = artist['comment'].encode('utf-8')
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
         except mechanize.ControlNotFoundError: pass
