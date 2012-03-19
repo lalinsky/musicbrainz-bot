@@ -9,7 +9,7 @@ from editing import MusicBrainzClient
 import pprint
 import urllib
 import time
-from utils import mangle_name, join_names, out, get_page_content, extract_page_title, colored_out, bcolors, escape_query
+from utils import mangle_name, join_names, out, get_page_content, extract_page_title, colored_out, bcolors, escape_query, quote_page_title
 import config as cfg
 
 engine = sqlalchemy.create_engine(cfg.MB_DB)
@@ -115,7 +115,7 @@ for rg_id, rg_gid, rg_name, ac_name, rg_type in db.execute(query, query_params):
         if not page_orig:
             continue
         page_title = title
-        url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, urllib.quote(page_title.encode('utf8').replace(' ', '_')),)
+        url = 'http://%s.wikipedia.org/wiki/%s' % (wp_lang, quote_page_title(page_title),)
         colored_out(bcolors.HEADER, ' * trying article %s' % (title,))
         page = mangle_name(page_orig)
         if 'redirect' in page:
