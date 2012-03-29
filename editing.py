@@ -207,10 +207,10 @@ class MusicBrainzClient(object):
             if "any changes to the data already present" not in page:
                 raise Exception('unable to post edit')
 
-    def edit_relationship(self, rel_id, entity0_type, entity1_type, old_link_type_id, new_link_type_id, attributes, edit_note, auto=False):
+    def edit_relationship(self, rel_id, entity0_type, entity1_type, old_link_type_id, new_link_type_id, attributes, begin_date, end_date, edit_note, auto=False):
         self.b.open(self.url("/edit/relationship/edit", id=str(rel_id), type0=entity0_type, type1=entity1_type))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
-        if self.b["ar.link_type_id"] == [str(new_link_type_id)]:
+        if self.b["ar.link_type_id"] == [str(new_link_type_id)] and new_link_type_id != old_link_type_id:
             print " * already set, not changing"
             return
         if self.b["ar.link_type_id"] != [str(old_link_type_id)]:
@@ -219,6 +219,10 @@ class MusicBrainzClient(object):
         self.b["ar.link_type_id"] = [str(new_link_type_id)]
         for k, v in attributes.items():
             self.b["ar.attrs."+k] = v
+        for k, v in begin_date.items():
+            self.b["ar.begin_date."+k] = str(v)
+        for k, v in end_date.items():
+            self.b["ar.end_date."+k] = str(v)
         self.b["ar.edit_note"] = edit_note.encode('utf8')
         try: self.b["ar.as_auto_editor"] = ["1"] if auto else []
         except mechanize.ControlNotFoundError: pass
