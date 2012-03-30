@@ -339,3 +339,11 @@ class MusicBrainzClient(object):
                 self.b['enter-vote.vote.%d.edit_note' % i] = edit_note.encode('utf8')
                 break
         self.b.submit()
+
+    def cancel_edit(self, edit_nr, edit_note=u''):
+        self.b.open(self.url("/edit/%s/cancel" % (edit_nr,)))
+        page = self.b.response().read()
+        self.b.select_form(predicate=lambda f: f.method == "POST" and "/cancel" in f.action)
+        if edit_note:
+            self.b['confirm.edit_note'] = edit_note.encode('utf8')
+        self.b.submit()
