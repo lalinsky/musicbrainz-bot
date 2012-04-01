@@ -42,8 +42,8 @@ date_categories_re['person']['end']['en'] = re.compile(r'(\d{4}) deaths', re.I)
 date_categories_re['group']['begin']['en'] = re.compile(r'Musical groups established in (\d{4})', re.I)
 date_categories_re['person']['end']['en'] = re.compile(r'Musical groups disestablished in (\d{4})', re.I)
 date_categories_re['person']['begin']['fr'] = re.compile(r'Naissance en (\d{4})', re.I)
-date_categories_re['person']['end']['fr'] = re.compile(r'Décès en (\d{4})', re.I)
-date_categories_re['group']['begin']['fr'] = re.compile(r'Groupe de musique formé en (\d{4})', re.I)
+date_categories_re['person']['end']['fr'] = re.compile(r'D\xe9c\xe8s en (\d{4})', re.I)
+date_categories_re['group']['begin']['fr'] = re.compile(r'Groupe de musique form\xe9 en (\d{4})', re.I)
 
 locales = {
     'fr': 'fr_FR.UTF-8',
@@ -301,7 +301,7 @@ def determine_end_date(artist, page, is_performance_name):
         date, reasons = determine_date_from_infobox(page, 'end_date')
         if date['year']:
             return date, reasons
-        if page.lang not in date_categories_re['group']['end']:
+        if page.lang not in date_categories_re['person']['end']:
             return empty_date, []
         relevant_categories = []
         for category in page.categories:
