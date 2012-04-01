@@ -77,9 +77,9 @@ class WikiPage(object):
         return page.strip().split('\n\n')[0]
 
     @classmethod
-    def fetch(cls, url):
+    def fetch(cls, url, use_cache=True):
         m = re.match(r'^http://([a-z]{2})\.wikipedia\.org', url)
         page_lang = m.group(1).encode('utf8')
         page_title = extract_page_title(url, page_lang)
         wp = MediaWiki('http://%s.wikipedia.org/w/api.php' % page_lang)
-        return cls(page_title, get_page_content(wp, page_title, page_lang) or '', page_lang)
+        return cls(page_title, get_page_content(wp, page_title, page_lang, use_cache) or '', page_lang)

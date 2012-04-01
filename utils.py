@@ -139,10 +139,11 @@ def add_page_content_to_cache(title, content, wp_lang):
     f.close()
 
 
-def get_page_content(wp, title, wp_lang):
-    content = get_page_content_from_cache(title, wp_lang)
-    if content:
-        return content
+def get_page_content(wp, title, wp_lang, use_cache=True):
+    if use_cache:
+        content = get_page_content_from_cache(title, wp_lang)
+        if content:
+            return content
     resp = wp.call({'action': 'query', 'prop': 'revisions', 'titles': title.encode('utf8'), 'rvprop': 'content'})
     pages = resp['query']['pages'].values()
     if not pages or 'revisions' not in pages[0]:
