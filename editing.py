@@ -2,6 +2,7 @@ import mechanize
 import urllib
 import time
 import re
+from datetime import datetime
 from mbbot.guesscase import guess_artist_sort_name
 
 
@@ -55,9 +56,10 @@ def extract_release_mbid(url):
 
 class MusicBrainzClient(object):
 
-    def __init__(self, username, password, server="http://musicbrainz.org"):
+    def __init__(self, username, password, server="http://musicbrainz.org", editor_id=None):
         self.server = server
         self.username = username
+        self.editor_id = editor_id
         self.b = mechanize.Browser()
         self.b.set_handle_robots(False)
         self.b.set_debug_redirects(False)
@@ -80,6 +82,34 @@ class MusicBrainzClient(object):
         resp = self.b.response()
         if resp.geturl() != self.url("/user/" + username):
             raise Exception('unable to login')
+
+    # return number of edits that left for today
+    def edits_left(self, max_edits=1000):
+        if self.editor_id is None:
+            print 'error, pass editor_id to constructor for edits_left()'
+            return 0
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        kwargs = {
+                'page': '2000',
+                'combinator': 'and',
+                'negation': '0',
+                'conditions.0.field': 'open_time',
+                'conditions.0.operator': '>',
+                'conditions.0.args.0': today,
+                'conditions.0.args.1': '',
+                'conditions.1.field': 'editor',
+                'conditions.1.operator': '=',
+                'conditions.1.name': self.username,
+                'conditions.1.args.0': str(self.editor_id)
+        }
+        url = self.url("/search/edits", **kwargs)
+        self.b.open(url)
+        page = self.b.response().read()
+        m = re.search(r'Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits', page)
+        if not m:
+            print 'error, could not determine remaining edits'
+            return 0
+        return max_edits - int(re.sub(r'[^0-9]+', '', m.group(1)))
 
     def add_release(self, album, edit_note, auto=False):
         form = album_to_form(album)
