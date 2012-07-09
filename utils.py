@@ -187,3 +187,29 @@ def escape_query(s):
     s = re.sub(r'\bNOT\b', 'not', s)
     s = re.sub(r'\+', '\\+', s)
     return s
+
+# from Picard 1.0
+def asciipunct(string):
+    """Convert some Unicode punctation characters to ASCII ones in ``string``."""
+    mapping = {
+        u"…": u"...",
+        u"‘": u"'",
+        u"’": u"'",
+        u"‚": u"'",
+        u"“": u"\"",
+        u"”": u"\"",
+        u"„": u"\"",
+        u"′": u"'",
+        u"″": u"\"",
+        u"‹": u"<",
+        u"›": u">",
+        u"‐": u"-",
+        u"‒": u"-",
+        u"–": u"-",
+        u"−": u"-",
+        u"—": u"-",
+        u"―": u"-", # modification: "-" instead of "--"
+    }
+    for orig, repl in mapping.iteritems():
+        string = string.replace(orig, repl)
+    return string
