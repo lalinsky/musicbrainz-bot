@@ -213,3 +213,9 @@ def asciipunct(string):
     for orig, repl in mapping.iteritems():
         string = string.replace(orig, repl)
     return string
+
+def extract_mbid(url, entity):
+    m = re.search(r'/'+re.escape(entity)+'/([0-9a-f-]{36})$', url)
+    if m is None:
+        return None
+    return m.group(1)

@@ -3,6 +3,7 @@ import urllib
 import time
 import re
 from datetime import datetime
+from utils import extract_mbid
 from mbbot.guesscase import guess_artist_sort_name
 
 
@@ -38,20 +39,6 @@ def album_to_form(album):
             form['mediums.%d.track.%d.length' % (medium_no, track_no)] = format_time(track['length'])
     form['edit_note'] = 'http://www.cdbaby.com/cd/' + album['_id'].split(':')[1]
     return form
-
-
-def extract_artist_mbid(url):
-    m = re.search(r'/artist/([0-9a-f-]{36})$', url)
-    if m is None:
-        return None
-    return m.group(1)
-
-
-def extract_release_mbid(url):
-    m = re.search(r'/release/([0-9a-f-]{36})$', url)
-    if m is None:
-        return None
-    return m.group(1)
 
 
 class MusicBrainzClient(object):
@@ -121,7 +108,7 @@ class MusicBrainzClient(object):
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/release" in f.action)
         print self.b.response().read()
         self.b.submit(name="save")
-        release_mbid = extract_release_mbid(self.b.geturl())
+        release_mbid = extract_mbid(self.b.geturl(), 'release')
         if not release_mbid:
             raise Exception('unable to post edit')
         return release_mbid
@@ -133,7 +120,7 @@ class MusicBrainzClient(object):
         self.b["edit-artist.sort_name"] = artist.get('sort_name', guess_artist_sort_name(artist['name']))
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         self.b.submit()
-        mbid = extract_artist_mbid(self.b.geturl())
+        mbid = extract_mbid(self.b.geturl(), 'artist')
         if not mbid:
             raise Exception('unable to post edit')
         return mbid
