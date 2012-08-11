@@ -74,7 +74,7 @@ class MusicBrainzClient(object):
     def edits_left(self, max_open_edits=2000, max_edits_per_day=1000):
         if self.editor_id is None:
             print 'error, pass editor_id to constructor for edits_left()'
-            return 0
+            return 0, 0
         re_found_edits = re.compile(r'Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits')
         today = datetime.utcnow().strftime('%Y-%m-%d')
         kwargs = {
@@ -96,18 +96,18 @@ class MusicBrainzClient(object):
         m = re_found_edits.search(page)
         if not m:
             print 'error, could not determine remaining daily edits'
-            return 0
+            return 0, 0
         edits_today = int(re.sub(r'[^0-9]+', '', m.group(1)))
         edits_left = max_edits_per_day - edits_today
         if edits_left <= 0:
-            return edits_left
+            return 0, 0
         url = self.url("/user/%s/edits/open" % (self.username,), page='2000')
         self.b.open(url)
         page = self.b.response().read()
         m = re_found_edits.search(page)
         if not m:
             print 'error, could not determine open edits'
-            return 0
+            return 0, 0
         open_edits = int(re.sub(r'[^0-9]+', '', m.group(1)))
         normal_edits_left = min(edits_left, max_open_edits - open_edits)
         return normal_edits_left, edits_left
