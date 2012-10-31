@@ -6,6 +6,7 @@ import locale
 import sys
 import os
 import unicodedata
+from subprocess import Popen, PIPE
 
 def mangle_name(s):
     s = unaccent(s.lower())
@@ -219,3 +220,11 @@ def extract_mbid(url, entity):
     if m is None:
         return None
     return m.group(1)
+
+def program_string(filename):
+    path = os.path.realpath(filename)
+    script = os.path.basename(path)
+    scriptdir = os.path.dirname(path)
+    args = ['git', 'describe', '--always', '--abbrev=16', '--dirty']
+    rev = Popen(args, stdout=PIPE, cwd=scriptdir).communicate()[0].strip()
+    return u'script: %s, revision %s' % (script, rev)
