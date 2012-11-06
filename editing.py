@@ -6,6 +6,12 @@ from datetime import datetime
 from utils import extract_mbid
 from mbbot.guesscase import guess_artist_sort_name
 
+try:
+    from mechanize import ControlNotFoundError
+except ImportError:
+    # for older versions of mechanize
+    from ClientForm import ControlNotFoundError
+
 
 def format_time(secs):
     return '%0d:%02d' % (secs / 60, secs % 60)
@@ -146,7 +152,7 @@ class MusicBrainzClient(object):
         self.b["ar.url"] = str(url)
         self.b["ar.edit_note"] = edit_note.encode('utf8')
         try: self.b["ar.as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
@@ -199,7 +205,7 @@ class MusicBrainzClient(object):
             self.b["edit-artist.comment"] = artist['comment'].encode('utf-8')
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
@@ -218,7 +224,7 @@ class MusicBrainzClient(object):
         self.b["edit-artist.type_id"] = [str(type_id)]
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-artist.as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
@@ -240,7 +246,7 @@ class MusicBrainzClient(object):
         self.b["edit-url.url"] = str(new_url)
         self.b["edit-url.edit_note"] = edit_note.encode('utf8')
         try: self.b["edit-url.as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
@@ -268,7 +274,7 @@ class MusicBrainzClient(object):
             self.b["ar.end_date."+k] = str(v)
         self.b["ar.edit_note"] = edit_note.encode('utf8')
         try: self.b["ar.as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit()
         page = self.b.response().read()
         if "Thank you, your edit has been" not in page:
@@ -323,10 +329,10 @@ class MusicBrainzClient(object):
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         try:
             self.b["edit_note"] = edit_note.encode('utf8')
-        except mechanize.ControlNotFoundError:
+        except ControlNotFoundError:
             raise Exception('unable to post edit')
         try: self.b["as_auto_editor"] = ["1"] if auto else []
-        except mechanize.ControlNotFoundError: pass
+        except ControlNotFoundError: pass
         self.b.submit(name="save")
         page = self.b.response().read()
         if "Release information" not in page:
@@ -363,10 +369,10 @@ class MusicBrainzClient(object):
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         try:
             self.b["edit_note"] = edit_note.encode('utf8')
-        except mechanize.ControlNotFoundError:
+        except ControlNotFoundError:
             raise Exception('unable to post edit')
         #try: self.b["as_auto_editor"] = ["1"] if auto else []
-        #except mechanize.ControlNotFoundError: pass
+        #except ControlNotFoundError: pass
         self.b.submit(name="save")
         page = self.b.response().read()
         if "Release information" not in page:
