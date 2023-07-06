@@ -165,6 +165,10 @@ class MusicBrainzClient(object):
 
         return True  # success
 
+    def __del__(self):
+        # Close selenium when object is removed
+        self.b.close()
+
     def add_release(self, album, edit_note, auto=False):
         form = album_to_form(album)
         self.b.open(self.url("/release/add"), urllib.urlencode(form))
