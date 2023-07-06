@@ -1,11 +1,13 @@
-import mechanize
 import urllib
 import time
 import re
 from utils import extract_mbid
 from mbbot.guesscase import guess_artist_sort_name
-from mechanize import ControlNotFoundError
 from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 def format_time(secs):
@@ -48,11 +50,13 @@ class MusicBrainzClient(object):
         self.server = server
         self.username = username
         self.editor_id = editor_id if editor_id else username  # TODO: testme
-        self.b = mechanize.Browser()
-        self.b.set_handle_robots(False)
-        self.b.set_debug_redirects(False)
-        self.b.set_debug_http(False)
-        self.b.addheaders = [('User-agent', 'dahr-musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
+        # self.b = mechanize.Browser()
+        # self.b.set_handle_robots(False)
+        # self.b.set_debug_redirects(False)
+        # self.b.set_debug_http(False)
+        # self.b.addheaders = [('User-agent', 'dahr-musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
+
+        self.b = webdriver.Firefox()
         self.login(username, password)
 
     def url(self, path, **kwargs):
@@ -62,13 +66,20 @@ class MusicBrainzClient(object):
         return self.server + path + query
 
     def login(self, username, password):
-        self.b.open(self.url("/login"))
-        self.b.select_form(predicate=lambda f: f.method.upper() == "POST" and "/login" in f.action)
-        self.b["username"] = username
-        self.b["password"] = password
-        self.b.submit()
-        resp = self.b.response()
-        if resp.geturl() != self.url("/user/" + username):
+        login_url = self.url("/login")
+        self.b.get(login_url)
+        username_field = self.b.find_element(By.ID, 'id-username')
+        username_field.clear()
+        username_field.send_keys(username)
+
+        pw_field = self.b.find_element(By.ID, "id-password")
+        pw_field.clear()
+        pw_field.send_keys(password)
+        pw_field.send_keys(Keys.RETURN)
+
+        WebDriverWait(self.b, 15).until(EC.url_changes(login_url))
+
+        if self.b.current_url != self.url("/user/" + username):
             raise Exception('unable to login')
 
     # return tuple (normal_edits_left, edits_left)
@@ -92,8 +103,8 @@ class MusicBrainzClient(object):
                 'conditions.1.operator': 'me'
         }
         url = self.url("/search/edits", **kwargs)
-        self.b.open(url)
-        page = self.b.response().read().decode('utf-8')
+        self.b.get(url)
+        page = self.b.page_source
         m = re_found_edits.search(page)
         if not m:
             print('error, could not determine remaining daily edits')
@@ -105,8 +116,8 @@ class MusicBrainzClient(object):
 
         # Check number of open edits
         url = self.url("/user/%s/edits/open" % (self.username,), page='2000')
-        self.b.open(url)
-        page = self.b.response().read().decode('utf-8')
+        self.b.get(url)
+        page = self.b.page_source
         m = re_found_edits.search(page)
         if not m:
             print('error, could not determine open edits')
