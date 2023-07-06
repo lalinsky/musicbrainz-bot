@@ -5,12 +5,7 @@ import re
 from datetime import datetime
 from utils import extract_mbid
 from mbbot.guesscase import guess_artist_sort_name
-
-try:
-    from mechanize import ControlNotFoundError
-except ImportError:
-    # for older versions of mechanize
-    from ClientForm import ControlNotFoundError
+from mechanize import ControlNotFoundError
 
 
 def format_time(secs):
@@ -49,26 +44,26 @@ def album_to_form(album):
 
 class MusicBrainzClient(object):
 
-    def __init__(self, username, password, server="http://musicbrainz.org", editor_id=None):
+    def __init__(self, username, password, server="https://test.musicbrainz.org", editor_id=None):
         self.server = server
         self.username = username
-        self.editor_id = editor_id
+        self.editor_id = editor_id if editor_id else username  # TODO: testme
         self.b = mechanize.Browser()
         self.b.set_handle_robots(False)
         self.b.set_debug_redirects(False)
         self.b.set_debug_http(False)
-        self.b.addheaders = [('User-agent', 'musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
+        self.b.addheaders = [('User-agent', 'dahr-musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
         self.login(username, password)
 
     def url(self, path, **kwargs):
         query = ''
         if kwargs:
-            query = '?' + urllib.urlencode([(k, v.encode('utf8')) for (k, v) in kwargs.items()])
+            query = '?' + urllib.parse.urlencode([(k, v.encode('utf8')) for (k, v) in kwargs.items()])
         return self.server + path + query
 
     def login(self, username, password):
         self.b.open(self.url("/login"))
-        self.b.select_form(predicate=lambda f: f.method == "POST" and "/login" in f.action)
+        self.b.select_form(predicate=lambda f: f.method.upper() == "POST" and "/login" in f.action)
         self.b["username"] = username
         self.b["password"] = password
         self.b.submit()
@@ -79,40 +74,42 @@ class MusicBrainzClient(object):
     # return tuple (normal_edits_left, edits_left)
     def edits_left(self, max_open_edits=2000, max_edits_per_day=1000):
         if self.editor_id is None:
-            print 'error, pass editor_id to constructor for edits_left()'
+            print('error, pass editor_id to constructor for edits_left()')
             return 0, 0
-        re_found_edits = re.compile(r'Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits')
-        today = datetime.utcnow().strftime('%Y-%m-%d')
+
+        # Check num of edits made today
+        re_found_edits = re.compile(r'Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits?')
+        # today = datetime.utcnow().strftime('%Y-%m-%d')
         kwargs = {
                 'page': '2000',
                 'combinator': 'and',
-                'negation': '0',
+                # 'negation': '0',
                 'conditions.0.field': 'open_time',
                 'conditions.0.operator': '>',
-                'conditions.0.args.0': today,
+                'conditions.0.args.0': "today",
                 'conditions.0.args.1': '',
                 'conditions.1.field': 'editor',
-                'conditions.1.operator': '=',
-                'conditions.1.name': self.username,
-                'conditions.1.args.0': str(self.editor_id)
+                'conditions.1.operator': 'me'
         }
         url = self.url("/search/edits", **kwargs)
         self.b.open(url)
-        page = self.b.response().read()
+        page = self.b.response().read().decode('utf-8')
         m = re_found_edits.search(page)
         if not m:
-            print 'error, could not determine remaining daily edits'
+            print('error, could not determine remaining daily edits')
             return 0, 0
         edits_today = int(re.sub(r'[^0-9]+', '', m.group(1)))
         edits_left = max_edits_per_day - edits_today
         if edits_left <= 0:
             return 0, 0
+
+        # Check number of open edits
         url = self.url("/user/%s/edits/open" % (self.username,), page='2000')
         self.b.open(url)
-        page = self.b.response().read()
+        page = self.b.response().read().decode('utf-8')
         m = re_found_edits.search(page)
         if not m:
-            print 'error, could not determine open edits'
+            print('error, could not determine open edits')
             return 0, 0
         open_edits = int(re.sub(r'[^0-9]+', '', m.group(1)))
         normal_edits_left = min(edits_left, max_open_edits - open_edits)
@@ -126,7 +123,7 @@ class MusicBrainzClient(object):
         self.b.submit(name="step_editnote")
         time.sleep(2.0)
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/release" in f.action)
-        print self.b.response().read()
+        print(self.b.response().read())
         self.b.submit(name="save")
         release_mbid = extract_mbid(self.b.geturl(), 'release')
         if not release_mbid:
@@ -164,25 +161,25 @@ class MusicBrainzClient(object):
 
     def edit_artist(self, artist, update, edit_note, auto=False):
         self.b.open(self.url("/artist/%s/edit" % (artist['gid'],)))
-        self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
+        self.b.select_form(predicate=lambda f: f.method.upper() == "POST" and "/edit" in f.action)
         if 'country' in update:
             if self.b["edit-artist.country_id"] != ['']:
-                print " * country already set, not changing"
+                print(" * country already set, not changing")
                 return
             self.b["edit-artist.country_id"] = [str(artist['country'])]
         if 'type' in update:
             if self.b["edit-artist.type_id"] != ['']:
-                print " * type already set, not changing"
+                print(" * type already set, not changing")
                 return
             self.b["edit-artist.type_id"] = [str(artist['type'])]
         if 'gender' in update:
             if self.b["edit-artist.gender_id"] != ['']:
-                print " * gender already set, not changing"
+                print(" * gender already set, not changing")
                 return
             self.b["edit-artist.gender_id"] = [str(artist['gender'])]
         if 'begin_date' in update:
             if self.b["edit-artist.begin_date.year"]:
-                print " * begin date year already set, not changing"
+                print(" * begin date year already set, not changing")
                 return
             self.b["edit-artist.begin_date.year"] = str(artist['begin_date_year'])
             if artist['begin_date_month']:
@@ -191,7 +188,7 @@ class MusicBrainzClient(object):
                     self.b["edit-artist.begin_date.day"] = str(artist['begin_date_day'])
         if 'end_date' in update:
             if self.b["edit-artist.end_date.year"]:
-                print " * end date year already set, not changing"
+                print(" * end date year already set, not changing")
                 return
             self.b["edit-artist.end_date.year"] = str(artist['end_date_year'])
             if artist['end_date_month']:
@@ -200,7 +197,7 @@ class MusicBrainzClient(object):
                     self.b["edit-artist.end_date.day"] = str(artist['end_date_day'])
         if 'comment' in update:
             if self.b["edit-artist.comment"] != '':
-                print " * comment already set, not changing"
+                print(" * comment already set, not changing")
                 return
             self.b["edit-artist.comment"] = artist['comment'].encode('utf-8')
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
@@ -219,7 +216,7 @@ class MusicBrainzClient(object):
         self.b.open(self.url("/artist/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         if self.b["edit-artist.type_id"] != ['']:
-            print " * already set, not changing"
+            print(" * already set, not changing")
             return
         self.b["edit-artist.type_id"] = [str(type_id)]
         self.b["edit-artist.edit_note"] = edit_note.encode('utf8')
@@ -238,10 +235,10 @@ class MusicBrainzClient(object):
         self.b.open(self.url("/url/%s/edit" % (entity_id,)))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         if self.b["edit-url.url"] != str(old_url):
-            print " * value has changed, aborting"
+            print(" * value has changed, aborting")
             return
         if self.b["edit-url.url"] == str(new_url):
-            print " * already set, not changing"
+            print(" * already set, not changing")
             return
         self.b["edit-url.url"] = str(new_url)
         self.b["edit-url.edit_note"] = edit_note.encode('utf8')
@@ -260,10 +257,10 @@ class MusicBrainzClient(object):
         self.b.open(self.url("/edit/relationship/edit", id=str(rel_id), type0=entity0_type, type1=entity1_type))
         self.b.select_form(predicate=lambda f: f.method == "POST" and "/edit" in f.action)
         if self.b["ar.link_type_id"] == [str(new_link_type_id)] and new_link_type_id != old_link_type_id:
-            print " * already set, not changing"
+            print(" * already set, not changing")
             return
         if self.b["ar.link_type_id"] != [str(old_link_type_id)]:
-            print " * value has changed, aborting"
+            print(" * value has changed, aborting")
             return
         self.b["ar.link_type_id"] = [str(new_link_type_id)]
         for k, v in attributes.items():
@@ -315,13 +312,13 @@ class MusicBrainzClient(object):
         for k, v in attributes.items():
             self.b.form.find_control(k).readonly = False
             if self.b[k] != v[0]:
-                print " * %s has changed, aborting" % k
+                print(" * %s has changed, aborting" % k)
                 return
             if self.b[k] != v[1]:
                 changed = True
                 self.b[k] = v[1]
         if not changed:
-            print " * already set, not changing"
+            print(" * already set, not changing")
             return
         self.b["barcode_confirm"] = ["1"]
         self.b.submit(name="step_editnote")
@@ -356,13 +353,13 @@ class MusicBrainzClient(object):
         changed = False
         for k, v in attributes.items():
             if self.b[k] != v[0]:
-                print " * %s has changed, aborting" % k
+                print(" * %s has changed, aborting" % k)
                 return
             if self.b[k] != v[1]:
                 changed = True
                 self.b[k] = v[1]
         if not changed:
-            print " * already set, not changing"
+            print(" * already set, not changing")
             return
         self.b.submit(name="step_editnote")
         page = self.b.response().read()
