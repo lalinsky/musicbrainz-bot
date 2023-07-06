@@ -10,40 +10,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-def format_time(secs):
-    return '%0d:%02d' % (secs / 60, secs % 60)
-
-
-def album_to_form(album):
-    form = {}
-    form['artist_credit.names.0.artist.name'] = album['artist']
-    form['artist_credit.names.0.name'] = album['artist']
-    if album.get('artist_mbid'):
-        form['artist_credit.names.0.mbid'] = album['artist_mbid']
-    form['name'] = album['title']
-    if album.get('date'):
-        date_parts = album['date'].split('-')
-        if len(date_parts) > 0:
-            form['date.year'] = date_parts[0]
-            if len(date_parts) > 1:
-                form['date.month'] = date_parts[1]
-                if len(date_parts) > 2:
-                    form['date.day'] = date_parts[2]
-    if album.get('label'):
-        form['labels.0.name'] = album['label']
-    if album.get('barcode'):
-        form['barcode'] = album['barcode']
-    for medium_no, medium in enumerate(album['mediums']):
-        form['mediums.%d.format' % medium_no] = medium['format']
-        form['mediums.%d.position' % medium_no] = medium['position']
-        for track_no, track in enumerate(medium['tracks']):
-            form['mediums.%d.track.%d.position' % (medium_no, track_no)] = track['position']
-            form['mediums.%d.track.%d.name' % (medium_no, track_no)] = track['title']
-            form['mediums.%d.track.%d.length' % (medium_no, track_no)] = format_time(track['length'])
-    form['edit_note'] = 'http://www.cdbaby.com/cd/' + album['_id'].split(':')[1]
-    return form
-
-
 class MusicBrainzClient(object):
 
     def __init__(self, username, password, server="https://test.musicbrainz.org", editor_id=None):
