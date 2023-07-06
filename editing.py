@@ -165,10 +165,7 @@ class MusicBrainzClient(object):
 
         return True  # success
 
-    def __del__(self):
-        # Close selenium when object is removed
-        self.b.close()
-
+    # TODO: check/update this function
     def cancel_edit(self, edit_nr, edit_note=u''):
         self.b.open(self.url("/edit/%s/cancel" % (edit_nr,)))
         page = self.b.response().read()
@@ -176,3 +173,7 @@ class MusicBrainzClient(object):
         if edit_note:
             self.b['confirm.edit_note'] = edit_note.encode('utf8')
         self.b.submit()
+
+    def __del__(self):
+        # Close selenium when object is removed
+        self.b.close()
