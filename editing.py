@@ -126,6 +126,45 @@ class MusicBrainzClient(object):
         normal_edits_left = min(edits_left, max_open_edits - open_edits)
         return normal_edits_left, edits_left
 
+    def add_external_link(self, artist_id, link, edit_note=None):
+        # get artist edit page
+        artist_url = self.url(f"/artist/{artist_id}")
+        artist_edit_url = f"{artist_url}/edit"
+        self.b.get(artist_edit_url)
+
+        # wait for JS to load external links table
+        WebDriverWait(self.b, 15).until(EC.presence_of_element_located((By.ID, "external-links-editor")))
+
+
+        # check if artist has DAHR link already
+        page = self.b.page_source
+        re_found_dahr_link = re.compile(r'adp.library.ucsb.edu/names')
+        dahr_link_found = re_found_dahr_link.search(page)
+        if dahr_link_found:
+            print("DAHR link already present")
+            return False
+
+        # Add URL
+        url_input = self.b.find_element(By.XPATH, "//input[@placeholder='Add another link']")
+        url_input.clear()
+        url_input.send_keys(link)
+
+        # Add edit note
+        if edit_note:
+            edit_note_field = self.b.find_element(By.ID, "id-edit-artist.edit_note")
+            edit_note_field.send_keys(edit_note)
+
+        # Submit edit
+        submit_button = self.b.find_element(By.CSS_SELECTOR, 'button.submit')
+        submit_button.click()
+
+        # wait for edit to go through
+        WebDriverWait(self.b, 20).until(EC.url_changes(artist_edit_url))
+        if self.b.current_url != artist_url:
+            raise Exception("Edit failed")
+
+        return True  # success
+
     def add_release(self, album, edit_note, auto=False):
         form = album_to_form(album)
         self.b.open(self.url("/release/add"), urllib.urlencode(form))
