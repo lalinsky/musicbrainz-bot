@@ -3,3 +3,4 @@ config.py
 .idea
 .DS_STORE
 config.py.dist
+config.ini
