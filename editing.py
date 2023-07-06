@@ -2,10 +2,10 @@ import mechanize
 import urllib
 import time
 import re
-from datetime import datetime
 from utils import extract_mbid
 from mbbot.guesscase import guess_artist_sort_name
 from mechanize import ControlNotFoundError
+from selenium import webdriver
 
 
 def format_time(secs):
