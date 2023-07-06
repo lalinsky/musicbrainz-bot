@@ -8,6 +8,9 @@ import os
 import unicodedata
 from subprocess import Popen, PIPE
 
+from six import unichr
+
+
 def mangle_name(s):
     s = unaccent(s.lower())
     s = re.sub(r'\(feat\. [^)]+\)$', '', s)
@@ -39,22 +42,22 @@ def join_names(type, strings):
         result += ' and %s more' % (len(strings) - 3)
     return result
 
-
-script_ranges = {}
-script_regexes = {}
-for line in open('Scripts.txt'):
-    line = line.strip()
-    if line.startswith('#') or not line:
-        continue
-    parts = line.split(';', 2)
-    range_str = parts[0].strip()
-    script = parts[1].split()[0]
-    if '..' in range_str:
-        range = tuple(int(a, 16) for a in range_str.split('..'))
-    else:
-        range = (int(range_str, 16), int(range_str, 16))
-    script_ranges.setdefault(script, []).append(range)
-
+#
+# script_ranges = {}
+# script_regexes = {}
+# for line in open('Scripts.txt'):
+#     line = line.strip()
+#     if line.startswith('#') or not line:
+#         continue
+#     parts = line.split(';', 2)
+#     range_str = parts[0].strip()
+#     script = parts[1].split()[0]
+#     if '..' in range_str:
+#         range = tuple(int(a, 16) for a in range_str.split('..'))
+#     else:
+#         range = (int(range_str, 16), int(range_str, 16))
+#     script_ranges.setdefault(script, []).append(range)
+#
 
 def is_in_script(text, scripts):
     regex = ''
@@ -69,7 +72,7 @@ def is_in_script(text, scripts):
             script_regexes[script] = script_regex
         regex += script_regex
     regex = '^[%s]+$' % regex
-    print regex
+    print(regex)
     return bool(re.match(regex, text))
 
 
