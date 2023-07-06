@@ -4,3 +4,5 @@ config.py
 .DS_STORE
 config.py.dist
 config.ini
+data
+*.log
