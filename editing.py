@@ -7,21 +7,17 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options
+from selenium.common.exceptions import TimeoutException
 
 
 class MusicBrainzClient(object):
     def __init__(self, username, password, server="https://test.musicbrainz.org", headless=False):
         self.server = server
         self.username = username
-        # self.b = mechanize.Browser()
-        # self.b.set_handle_robots(False)
-        # self.b.set_debug_redirects(False)
-        # self.b.set_debug_http(False)
-        # self.b.addheaders = [('User-agent', 'dahr-musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
-
 
         ff_options = Options()
-        ff_options.headless = headless
+        if headless:
+            ff_options.headless = headless
         self.b = webdriver.Firefox(options=ff_options)
         self.login(username, password)
 
@@ -50,16 +46,17 @@ class MusicBrainzClient(object):
         if self.b.current_url != self.url("/user/" + username):
             raise Exception("Unable to login. Is your password correct?")
 
+        logging.info(f"Logged in to MusicBrainz as {self.username} at {self.server}")
+
     # return tuple (normal_edits_left, edits_left)
+    # TODO: This could be more efficient if it used the table on the user page. Fewer page loads.
     def edits_left(self, max_open_edits=2000, max_edits_per_day=1000):
 
         # Check num of edits made today
         re_found_edits = re.compile(r"Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits?")
-        # today = datetime.utcnow().strftime('%Y-%m-%d')
         kwargs = {
             "page": "2000",
             "combinator": "and",
-            # 'negation': '0',
             "conditions.0.field": "open_time",
             "conditions.0.operator": ">",
             "conditions.0.args.0": "today",
@@ -77,6 +74,7 @@ class MusicBrainzClient(object):
         edits_today = int(re.sub(r"[^0-9]+", "", match.group(1)))
         edits_left = max_edits_per_day - edits_today
         if edits_left <= 0:
+            logging.info("No more edits available for today. Try again tomorrow.")
             return 0, 0
 
         # Check number of open edits
@@ -89,6 +87,7 @@ class MusicBrainzClient(object):
             return 0, 0
         open_edits = int(re.sub(r"[^0-9]+", "", match.group(1)))
         normal_edits_left = min(edits_left, max_open_edits - open_edits)
+        logging.info(f"Edits available for today: {edits_left}")
         return normal_edits_left, edits_left
 
     def add_external_link(self, artist_id, link, edit_note=None):
@@ -96,6 +95,9 @@ class MusicBrainzClient(object):
         artist_url = self.url(f"/artist/{artist_id}")
         artist_edit_url = f"{artist_url}/edit"
         self.b.get(artist_edit_url)
+        if self.b.current_url != artist_edit_url and "/artist/" in self.b.current_url:
+            # Artist ID redirected
+            artist_url = self.b.current_url.replace("/edit", "")
 
         # wait for JS to load external links table
         WebDriverWait(self.b, 15).until(
@@ -107,7 +109,7 @@ class MusicBrainzClient(object):
         re_found_dahr_link = re.compile(r"adp.library.ucsb.edu/names")
         dahr_link_found = re_found_dahr_link.search(page)
         if dahr_link_found:
-            logging.info(f"DAHR link already present for MB id {artist_id}")
+            logging.info(f"\tDAHR link already present for MB id {artist_id}")
             return False
 
         # Add URL
@@ -126,23 +128,20 @@ class MusicBrainzClient(object):
         submit_button = self.b.find_element(By.CSS_SELECTOR, "button.submit")
         submit_button.click()
 
-        # wait for edit to go through
-        WebDriverWait(self.b, 20).until(EC.url_changes(artist_edit_url))
+        try:
+            # wait for edit to go through
+            WebDriverWait(self.b, 60).until(EC.url_changes(artist_edit_url))
+        except TimeoutException:
+            logging.error(f"\tEdit timed out for MB entry {artist_id}")
+            raise TimeoutError
+
+        # If we don't end up back on the artist page, something went weird with the edit
         if self.b.current_url != artist_url:
-            raise Exception("Edit failed")
+            raise RuntimeError(f"\tEdit failed for MB entry {artist_id}")
 
-        return True  # success
-
-    # TODO: check/update this function
-    # def cancel_edit(self, edit_nr, edit_note=""):
-    #     self.b.open(self.url("/edit/%s/cancel" % (edit_nr,)))
-    #     page = self.b.response().read()
-    #     self.b.select_form(
-    #         predicate=lambda f: f.method == "POST" and "/cancel" in f.action
-    #     )
-    #     if edit_note:
-    #         self.b["confirm.edit_note"] = edit_note.encode("utf8")
-    #     self.b.submit()
+        # If we get here, the edit was made successfully
+        logging.info(f"\tAdded link to MB entry {artist_id}")
+        return True
 
     def __del__(self):
         # Close selenium when object is removed
