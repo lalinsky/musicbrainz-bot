@@ -6,6 +6,7 @@ import logging
 import configparser
 import json
 import os
+from pathlib import Path
 import pandas
 from selenium.webdriver.remote.remote_connection import LOGGER as SELENIUM_LOGGER
 from editing import MusicBrainzClient
@@ -67,10 +68,12 @@ def save_progress(config: configparser.ConfigParser, checked: list, modified: li
         modified: List of id mappings that we modified
     """
     checked_out = config.get("general", "checked_file")
+    os.makedirs(os.path.dirname(checked_out), exist_ok=True)
     with open(checked_out, "w", encoding="utf-8") as checked_file:
         json.dump(checked, checked_file, indent=4)
 
     modified_out = config.get("general", "modified_file")
+    os.makedirs(os.path.dirname(checked_out), exist_ok=True)
     with open(modified_out, "w", encoding="utf-8") as mod_file:
         json.dump(modified, mod_file, indent=4)
 
@@ -112,18 +115,20 @@ def run():
     Main method for bot.
     """
 
-    # Init logging
-    logging.basicConfig(
-        encoding="utf-8",
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%m/%d/%Y %I:%M:%S %p",
-        handlers=[logging.FileHandler("bot.log"), logging.StreamHandler()],
-    )
-
     # Load config
     config = configparser.ConfigParser()
     config.read("config.ini")
+
+    # Init logging
+    log_file = config.get("general", "log")
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    logging.basicConfig(
+        encoding="utf-8",
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s ",
+        datefmt="%m/%d/%Y %I:%M:%S %p",
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
+    )
 
     # Load DAHR data
     id_mappings = load_starting_data(config)
@@ -137,7 +142,7 @@ def run():
     if not unchecked_mappings:
         logging.info(
             "All entries already checked. "
-            "To rerun, clear the saved data files specified in 'config.ini'"
+            "To rerun, clear the saved data files specified in 'config.ini'", extra={"test": "noodle"}
         )
         return
     # Log number of already-checked entries
