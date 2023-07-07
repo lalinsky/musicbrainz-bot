@@ -5,4 +5,5 @@ config.py
 config.py.dist
 config.ini
 data
+log
 *.log
