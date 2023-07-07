@@ -1,3 +1,4 @@
+import logging
 import urllib
 import re
 from selenium import webdriver
@@ -5,22 +6,23 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.firefox.options import Options
 
 
 class MusicBrainzClient(object):
-    def __init__(
-        self, username, password, server="https://test.musicbrainz.org", editor_id=None
-    ):
+    def __init__(self, username, password, server="https://test.musicbrainz.org", headless=False):
         self.server = server
         self.username = username
-        self.editor_id = editor_id if editor_id else username  # TODO: testme
         # self.b = mechanize.Browser()
         # self.b.set_handle_robots(False)
         # self.b.set_debug_redirects(False)
         # self.b.set_debug_http(False)
         # self.b.addheaders = [('User-agent', 'dahr-musicbrainz-bot/1.0 ( %s/user/%s )' % (server, username))]
 
-        self.b = webdriver.Firefox()
+
+        ff_options = Options()
+        ff_options.headless = headless
+        self.b = webdriver.Firefox(options=ff_options)
         self.login(username, password)
 
     def url(self, path, **kwargs):
@@ -46,13 +48,10 @@ class MusicBrainzClient(object):
         WebDriverWait(self.b, 15).until(EC.url_changes(login_url))
 
         if self.b.current_url != self.url("/user/" + username):
-            raise Exception("unable to login")
+            raise Exception("Unable to login. Is your password correct?")
 
     # return tuple (normal_edits_left, edits_left)
     def edits_left(self, max_open_edits=2000, max_edits_per_day=1000):
-        if self.editor_id is None:
-            print("error, pass editor_id to constructor for edits_left()")
-            return 0, 0
 
         # Check num of edits made today
         re_found_edits = re.compile(r"Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits?")
@@ -73,7 +72,7 @@ class MusicBrainzClient(object):
         page = self.b.page_source
         match = re_found_edits.search(page)
         if not match:
-            print("error, could not determine remaining daily edits")
+            logging.error("Could not determine remaining daily edits")
             return 0, 0
         edits_today = int(re.sub(r"[^0-9]+", "", match.group(1)))
         edits_left = max_edits_per_day - edits_today
@@ -86,7 +85,7 @@ class MusicBrainzClient(object):
         page = self.b.page_source
         match = re_found_edits.search(page)
         if not match:
-            print("error, could not determine open edits")
+            logging.error("Could not determine open edits")
             return 0, 0
         open_edits = int(re.sub(r"[^0-9]+", "", match.group(1)))
         normal_edits_left = min(edits_left, max_open_edits - open_edits)
@@ -108,7 +107,7 @@ class MusicBrainzClient(object):
         re_found_dahr_link = re.compile(r"adp.library.ucsb.edu/names")
         dahr_link_found = re_found_dahr_link.search(page)
         if dahr_link_found:
-            print("DAHR link already present")
+            logging.info(f"DAHR link already present for MB id {artist_id}")
             return False
 
         # Add URL
