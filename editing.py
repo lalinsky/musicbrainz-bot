@@ -90,7 +90,7 @@ class MusicBrainzClient(object):
         logging.info(f"Edits available for today: {edits_left}")
         return normal_edits_left, edits_left
 
-    def add_external_link(self, artist_id, link, edit_note=None):
+    def add_external_link(self, artist_id, link, edit_note=None, force_votable=True):
         # get artist edit page
         artist_url = self.url(f"/artist/{artist_id}")
         artist_edit_url = f"{artist_url}/edit"
@@ -121,12 +121,14 @@ class MusicBrainzClient(object):
 
         # Add edit note
         if edit_note:
-            edit_note_field = self.b.find_element(By.ID, "id-edit-artist.edit_note")
-            edit_note_field.send_keys(edit_note)
+            self.b.find_element(By.ID, "id-edit-artist.edit_note").send_keys(edit_note)
+
+        # Make edit votable
+        if force_votable:
+            self.b.find_element(By.ID, "id-edit-artist.make_votable").click()
 
         # Submit edit
-        submit_button = self.b.find_element(By.CSS_SELECTOR, "button.submit")
-        submit_button.click()
+        self.b.find_element(By.CSS_SELECTOR, "button.submit").click()
 
         try:
             # wait for edit to go through

@@ -13,6 +13,8 @@ from editing import MusicBrainzClient
 
 SELENIUM_LOGGER.setLevel(logging.CRITICAL)
 
+EDIT_NOTE = "DAHR artist and MusicBrainz artist matched via Wikidata"
+
 
 def load_starting_data(config: configparser.ConfigParser) -> list:
     """
@@ -142,7 +144,7 @@ def run():
     if not unchecked_mappings:
         logging.info(
             "All entries already checked. "
-            "To rerun, clear the saved data files specified in 'config.ini'", extra={"test": "noodle"}
+            "To rerun, clear the saved data files specified in 'config.ini'"
         )
         return
     # Log number of already-checked entries
@@ -166,7 +168,7 @@ def run():
         # Check an entry
         logging.info(f"Checking MB entry {entry['mb']}")
         try:
-            link_added = mb_client.add_external_link(entry["mb"], entry["dahr"])
+            link_added = mb_client.add_external_link(entry["mb"], entry["dahr"], edit_note=EDIT_NOTE)
             checked.append(entry)
             if link_added:
                 modified.append(entry)
