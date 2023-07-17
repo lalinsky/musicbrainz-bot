@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.firefox.options import Options
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
 class MusicBrainzClient(object):
@@ -113,9 +113,14 @@ class MusicBrainzClient(object):
             return False
 
         # Add URL
-        url_input = self.b.find_element(
-            By.XPATH, "//input[@placeholder='Add another link']"
-        )
+        try:
+            url_input = self.b.find_element(
+                By.XPATH, "//input[@placeholder='Add another link']"
+            )
+        except NoSuchElementException:
+            url_input = self.b.find_element(
+                By.XPATH, "//input[@placeholder='Add link']"
+            )
         url_input.clear()
         url_input.send_keys(link)
 
