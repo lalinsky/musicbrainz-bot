@@ -6,7 +6,6 @@ import logging
 import configparser
 import json
 import os
-from pathlib import Path
 import pandas
 from selenium.webdriver.remote.remote_connection import LOGGER as SELENIUM_LOGGER
 from editing import MusicBrainzClient
@@ -166,10 +165,9 @@ def run():
         # Check an entry
         logging.info(f"Checking MB entry {entry['mb']}")
         try:
-            link_added = mb_client.add_external_link(entry["mb"],
-                                                     entry["dahr"],
-                                                     edit_note=config.get("general", "edit_note")
-                                                     )
+            link_added = mb_client.add_external_link(
+                entry["mb"], entry["dahr"], edit_note=config.get("general", "edit_note")
+            )
             checked.append(entry)
             if link_added:
                 modified.append(entry)

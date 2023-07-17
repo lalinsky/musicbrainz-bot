@@ -1,3 +1,7 @@
+"""
+Editing content on MusicBrainz
+"""
+
 import logging
 import urllib
 import re
@@ -10,8 +14,33 @@ from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
-class MusicBrainzClient(object):
-    def __init__(self, username, password, server="https://test.musicbrainz.org", headless=False):
+class MusicBrainzClient:
+    """
+    A class used as a client for editing MusicBrainz
+
+    Attributes
+    ----------
+    server: str
+        The musicbrains server the client accesses (e.g. test.musicbrainz.org)
+    username: str
+        Name of the user the client signs in as
+    b: selenium webdriver
+        Web driver used by the client
+
+    Methods
+    -------
+    login(username, password)
+        Logs in to the server specified at self.server using the provided credentials
+    edits_left(max_open_edits=2000, max_edits_per_day=1000)
+        Returns the number of edits the bot may make today, given the provided limitations
+    add_external_link(artist_id, link, edit_note=None, force_votable=True)
+        Add the provided link to the MB artist specified.
+        If the artist already has a DAHR link, no change is made.
+    """
+
+    def __init__(
+        self, username, password, server="https://test.musicbrainz.org", headless=False
+    ):
         self.server = server
         self.username = username
 
@@ -21,7 +50,16 @@ class MusicBrainzClient(object):
         self.b = webdriver.Firefox(options=ff_options)
         self.login(username, password)
 
-    def url(self, path, **kwargs):
+    def _url(self, path, **kwargs):
+        """
+        Create a URL using the client's MB server (self.server)
+        Args:
+            path: URL path to follow MB server base
+            **kwargs: URL query arguments & values
+
+        Returns:
+            URL
+        """
         query = ""
         if kwargs:
             query = "?" + urllib.parse.urlencode(
@@ -30,7 +68,16 @@ class MusicBrainzClient(object):
         return self.server + path + query
 
     def login(self, username, password):
-        login_url = self.url("/login")
+        """
+        Log in to MusicBrainz
+        Args:
+            username: MB username
+            password: MB password
+
+        Returns:
+            None
+        """
+        login_url = self._url("/login")
         self.b.get(login_url)
         username_field = self.b.find_element(By.ID, "id-username")
         username_field.clear()
@@ -43,15 +90,23 @@ class MusicBrainzClient(object):
 
         WebDriverWait(self.b, 15).until(EC.url_changes(login_url))
 
-        if self.b.current_url != self.url("/user/" + username):
-            raise Exception("Unable to login. Is your password correct?")
+        if self.b.current_url != self._url("/user/" + username):
+            raise ValueError("Unable to login. Is your password correct?")
 
         logging.info(f"Logged in to MusicBrainz as {self.username} at {self.server}")
 
-    # return tuple (normal_edits_left, edits_left)
     # TODO: This could be more efficient if it used the table on the user page. Fewer page loads.
-    def edits_left(self, max_open_edits=2000, max_edits_per_day=1000):
+    def edits_left(self, max_open_edits=2000, max_edits_per_day=1000) -> int:
+        """
+        Determine the number of edits the bot may make today
 
+        Args:
+            max_open_edits: Maximum number of unresolved (open) edits the bot may have at any given time
+            max_edits_per_day: Maximum number of edits the bot may make in a day, if they were starting from 0
+
+        Returns:
+            The number of edits the bot may make today
+        """
         # Check num of edits made today
         re_found_edits = re.compile(r"Found (?:at least )?([0-9]+(?:,[0-9]+)?) edits?")
         kwargs = {
@@ -64,7 +119,7 @@ class MusicBrainzClient(object):
             "conditions.1.field": "editor",
             "conditions.1.operator": "me",
         }
-        url = self.url("/search/edits", **kwargs)
+        url = self._url("/search/edits", **kwargs)
         self.b.get(url)
         page = self.b.page_source
         match = re_found_edits.search(page)
@@ -78,7 +133,7 @@ class MusicBrainzClient(object):
             return 0, 0
 
         # Check number of open edits
-        url = self.url("/user/%s/edits/open" % (self.username,), page="2000")
+        url = self._url(f"/user/{self.username}/edits/open", page="2000")
         self.b.get(url)
         page = self.b.page_source
         match = re_found_edits.search(page)
@@ -91,8 +146,20 @@ class MusicBrainzClient(object):
         return normal_edits_left, edits_left
 
     def add_external_link(self, artist_id, link, edit_note=None, force_votable=True):
+        """
+        Add the provided link to the MB artist specified. If the artist already has a DAHR link, no change is made.
+
+        Args:
+            artist_id: MusicBrainz ID
+            link: Link to add
+            edit_note: Note to include in edit
+            force_votable: Force edits to be votable or not
+
+        Returns:
+            None
+        """
         # get artist edit page
-        artist_url = self.url(f"/artist/{artist_id}")
+        artist_url = self._url(f"/artist/{artist_id}")
         artist_edit_url = f"{artist_url}/edit"
         self.b.get(artist_edit_url)
         if self.b.current_url != artist_edit_url and "/artist/" in self.b.current_url:
@@ -138,9 +205,9 @@ class MusicBrainzClient(object):
         try:
             # wait for edit to go through
             WebDriverWait(self.b, 60).until(EC.url_changes(artist_edit_url))
-        except TimeoutException:
+        except TimeoutException as exc:
             logging.error(f"\tEdit timed out for MB entry {artist_id}")
-            raise TimeoutError
+            raise exc
 
         # If we don't end up back on the artist page, something went weird with the edit
         if self.b.current_url != artist_url:
