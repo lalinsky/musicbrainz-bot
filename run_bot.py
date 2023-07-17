@@ -13,8 +13,6 @@ from editing import MusicBrainzClient
 
 SELENIUM_LOGGER.setLevel(logging.CRITICAL)
 
-EDIT_NOTE = "DAHR artist and MusicBrainz artist matched via Wikidata"
-
 
 def load_starting_data(config: configparser.ConfigParser) -> list:
     """
@@ -168,7 +166,10 @@ def run():
         # Check an entry
         logging.info(f"Checking MB entry {entry['mb']}")
         try:
-            link_added = mb_client.add_external_link(entry["mb"], entry["dahr"], edit_note=EDIT_NOTE)
+            link_added = mb_client.add_external_link(entry["mb"],
+                                                     entry["dahr"],
+                                                     edit_note=config.get("general", "edit_note")
+                                                     )
             checked.append(entry)
             if link_added:
                 modified.append(entry)
@@ -179,8 +180,9 @@ def run():
         except (TimeoutError, RuntimeError):
             errors.append(entry)
 
-        # Save progress every 20 people
-        if (num + 1) % 3 == 0:
+        # Save progress every N people
+        save_interval = int(config.get("general", "save_interval"))
+        if (num + 1) % save_interval == 0:
             save_progress(config, checked, modified)
 
     if errors:
