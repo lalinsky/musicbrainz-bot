@@ -58,13 +58,16 @@ def init_mb_client(config: configparser.ConfigParser) -> MusicBrainzClient:
     return MusicBrainzClient(mb_user, mb_pw, server=mb_server, headless=headless)
 
 
-def save_progress(config: configparser.ConfigParser, checked: list, modified: list):
+def save_progress(
+    config: configparser.ConfigParser, checked: list, modified: list, errors: list
+):
     """
     Saves list of checked entries & modified entries to files specified in config.
     Args:
         config: Loaded configuration info
         checked: List of id mappings already checked
         modified: List of id mappings that we modified
+        errors: List of id mappings that produced an error
     """
     checked_out = config.get("general", "checked_file")
     os.makedirs(os.path.dirname(checked_out), exist_ok=True)
@@ -76,37 +79,54 @@ def save_progress(config: configparser.ConfigParser, checked: list, modified: li
     with open(modified_out, "w", encoding="utf-8") as mod_file:
         json.dump(modified, mod_file, indent=4)
 
-    logging.info(f"Progress saved to {checked_out} and {modified_out}")
+    error_out = config.get("general", "error_file")
+    os.makedirs(os.path.dirname(error_out), exist_ok=True)
+    with open(error_out, "w", encoding="utf-8") as error_file:
+        json.dump(errors, error_file, indent=4)
+
+    logging.info("Progress saved to %s & %s & %s", checked_out, modified_out, error_out)
 
 
-def load_progress(config: configparser.ConfigParser) -> (list, list):
+def load_progress(config: configparser.ConfigParser) -> (list, list, list):
     """
     Load previously checked and modified entries from files specified in config.
     Args:
         config:  Loaded configuration info
 
     Returns:
-        List of previously checked id mappings, and list of previously modified id mappings
+        Lists of previous: checked id mappings, modified id mappings, and errors
     """
+    # Load Checked
     checked_out = config.get("general", "checked_file")
     if os.path.isfile(checked_out):
         with open(checked_out, "r", encoding="utf-8") as checked_file:
             checked = json.load(checked_file)
-        logging.info(f"Checked entries loaded from {checked_out}")
+        logging.info("Checked entries loaded from %s", checked_out)
 
     else:
         checked = []
 
+    # Load modified
     modified_out = config.get("general", "modified_file")
     if os.path.isfile(modified_out):
         with open(modified_out, "r", encoding="utf-8") as mod_file:
             modified = json.load(mod_file)
-        logging.info(f"Modified entries loaded from {modified_out}")
+        logging.info("Modified entries loaded from %s", modified_out)
 
     else:
         modified = []
 
-    return checked, modified
+    # Load errors
+    error_out = config.get("general", "error_file")
+    if os.path.isfile(error_out):
+        with open(error_out, "r", encoding="utf-8") as error_file:
+            errors = json.load(error_file)
+        logging.info("Error loaded from %s", error_out)
+
+    else:
+        errors = []
+
+    return checked, modified, errors
 
 
 def run():
@@ -133,8 +153,7 @@ def run():
     id_mappings = load_starting_data(config)
 
     # Check for existing saved data
-    checked, modified = load_progress(config)
-    errors = []
+    checked, modified, errors = load_progress(config)
 
     # Get mappings that aren't in the saved data
     unchecked_mappings = [mapping for mapping in id_mappings if mapping not in checked]
@@ -146,11 +165,11 @@ def run():
         return
     # Log number of already-checked entries
     if checked:
-        logging.info(f"Already checked {len(checked)}/{len(id_mappings)} entries")
+        logging.info("Already checked %s/%s entries", len(checked), len(id_mappings))
 
     # Init MB client
     mb_client = init_mb_client(config)
-    edits_left = mb_client.edits_left()[0]
+    edits_left = mb_client.edits_left()
     if edits_left <= 0:
         return
 
@@ -159,11 +178,11 @@ def run():
         # If we're out of edits for the day, stop
         if edits_left <= 0:
             logging.warning("Out of edits for today. Try again later.")
-            save_progress(config, checked, modified)
+            save_progress(config, checked, modified, errors)
             break
 
         # Check an entry
-        logging.info(f"Checking MB entry {entry['mb']}")
+        logging.info("Checking MB entry %s", entry["mb"])
         try:
             link_added = mb_client.add_external_link(
                 entry["mb"], entry["dahr"], edit_note=config.get("general", "edit_note")
@@ -181,14 +200,18 @@ def run():
         # Save progress every N people
         save_interval = int(config.get("general", "save_interval"))
         if (num + 1) % save_interval == 0:
-            save_progress(config, checked, modified)
+            save_progress(config, checked, modified, errors)
 
     if errors:
-        logging.error(f"{len(errors)} were not checked successfully. Please run again.")
+        logging.error(
+            "%s were not checked successfully. Please run again.", len(errors)
+        )
     else:
         logging.info(
-            f"{len(checked)}/{len(id_mappings)} checked successfully. "
-            f"{len(modified)} links added."
+            "%s/%s checked successfully. %s links added.",
+            len(checked),
+            len(id_mappings),
+            len(modified),
         )
 
 
